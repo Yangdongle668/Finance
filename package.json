@@ -1,0 +1,17 @@
+{
+  "name": "finance-system",
+  "version": "1.0.0",
+  "description": "精斗云云会计系统 - 全栈财务管理",
+  "private": true,
+  "scripts": {
+    "install:all": "cd server && npm install && cd ../client && npm install",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "setup": "npm run install:all && cd server && cp .env.example .env && npm run seed",
+    "build": "cd server && npm run build && cd ../client && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

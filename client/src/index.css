@@ -1,0 +1,21 @@
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; padding: 0; }
+body { background: #f0f2f5; }
+
+.page-container {
+  padding: 24px;
+  min-height: 100%;
+}
+
+.stat-card .ant-statistic-title { font-size: 13px; color: #666; }
+.stat-card .ant-statistic-content-value { font-size: 24px; font-weight: 600; }
+
+.voucher-table .ant-table-row:hover td { background: #e6f4ff !important; }
+
+/* 凭证借贷颜色 */
+.debit-col  { color: #d4380d; }
+.credit-col { color: #389e0d; }
+
+/* 账簿余额 */
+.balance-positive { color: #1677ff; }
+.balance-negative { color: #cf1322; }
