@@ -8,7 +8,8 @@ RUN npm ci
 
 COPY . .
 
-# 构建生产包（vite build）
+# 构建生产包（vite build）— 增加内存限制防止 OOM
+ENV NODE_OPTIONS="--max-old-space-size=1024"
 RUN npm run build
 
 # ── Stage 2: Serve with Nginx ────────────────────────────────
