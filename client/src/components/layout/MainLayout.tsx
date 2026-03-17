@@ -3,7 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Layout, Menu, Dropdown, Avatar, Select, Space, Typography, Tag } from 'antd'
 import {
   DashboardOutlined, FileTextOutlined, BookOutlined, BarChartOutlined,
-  BankOutlined, FileInvoiceOutlined, TeamOutlined, SettingOutlined,
+  BankOutlined, AuditOutlined, TeamOutlined, SettingOutlined,
   UserOutlined, LogoutOutlined, LockOutlined, AppstoreOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
@@ -32,7 +32,7 @@ const menuItems = [
     ]
   },
   { key: '/assets', icon: <AppstoreOutlined />, label: '固定资产' },
-  { key: '/invoices', icon: <FileInvoiceOutlined />, label: '发票管理' },
+  { key: '/invoices', icon: <AuditOutlined />, label: '发票管理' },
   {
     key: 'settings', icon: <SettingOutlined />, label: '系统设置',
     children: [
