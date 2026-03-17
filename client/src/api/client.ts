@@ -119,7 +119,7 @@ export interface VoucherLine {
 export interface Voucher {
   id: string; voucherNo: string; voucherDate: string; periodId: string; summary: string
   type: string; status: 'draft' | 'pending' | 'approved' | 'posted' | 'reversed'
-  preparedBy: string; reviewedBy?: string; lines?: VoucherLine[]
+  preparedBy: string; reviewedBy?: string; attachmentCount?: number; lines?: VoucherLine[]
   createdAt: string; updatedAt: string
 }
 export interface VoucherFilter { periodId?: string; status?: string; keyword?: string; accountCode?: string; page?: number; pageSize?: number; startDate?: string; endDate?: string }
@@ -129,7 +129,7 @@ export interface TrialBalanceRow { accountCode: string; accountName: string; lev
 export interface LedgerResult { accountCode: string; accountName: string; openingBalance: number; lines: { date: string; voucherNo: string; summary: string; debit: number; credit: number; balance: number }[] }
 export interface GeneralLedgerRow { accountCode: string; accountName: string; nature: string; openingBalance: number; debitAmount: number; creditAmount: number; closingBalance: number; prevClosingBalance: number }
 export interface BalanceSheet { assets: Record<string, Record<string, number>>; liabilities: Record<string, Record<string, number>>; equity: Record<string, number> }
-export interface IncomeStatement { revenue: number; costOfGoods: number; grossProfit: number; grossMargin: number; sellingExp: number; adminExp: number; financeExp: number; operatingProfit: number; netProfit: number; netMargin: number }
+export interface IncomeStatement { revenue: number; costOfGoods: number; grossProfit: number; grossMargin: number; sellingExp: number; adminExp: number; financeExp: number; operatingProfit: number; operatingMargin: number; netProfit: number; netMargin: number }
 export interface Dashboard { funds: { cash: number; bank: number; total: number; receivable: number; payable: number }; profitability: { netProfit: number; grossMargin: number; netMargin: number }; solvency: { totalAssets: number; totalLiabilities: number; debtRatio: number } }
 
 export interface Asset { id: string; assetNo: string; name: string; category: string; originalValue: number; usefulLife: number; acquiredDate: string; status: string }
