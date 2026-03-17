@@ -6,3 +6,4 @@ dist/
 .env
 logs/
 data/
+backups/

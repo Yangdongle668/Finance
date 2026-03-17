@@ -1,0 +1,94 @@
+services:
+
+  # ── 后端 API 服务 ──────────────────────────────────────────
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: finance-server
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DB_PATH: /app/data/finance.db
+      JWT_SECRET: ${JWT_SECRET:-please_change_this_secret_in_production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-10}
+      CLIENT_URL: ${CLIENT_URL:-http://localhost}
+    volumes:
+      # 持久化 SQLite 数据库
+      - finance_data:/app/data
+      # 持久化日志
+      - finance_logs:/app/logs
+    networks:
+      - finance_net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── 前端 + Nginx 反向代理 ──────────────────────────────────
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: finance-client
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-80}:80"
+    depends_on:
+      server:
+        condition: service_healthy
+    networks:
+      - finance_net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health.txt"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── 数据库初始化（仅首次运行） ─────────────────────────────
+  seed:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: finance-seed
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      DB_PATH: /app/data/finance.db
+      JWT_SECRET: ${JWT_SECRET:-please_change_this_secret_in_production}
+    volumes:
+      - finance_data:/app/data
+    networks:
+      - finance_net
+    # 仅当 finance.db 不存在时才运行种子
+    command: >
+      sh -c "
+        if [ ! -f /app/data/finance.db ]; then
+          echo '🌱 首次部署，初始化数据库...' &&
+          node -e \"const {runMigrations}=require('./dist/infrastructure/database/migrate');runMigrations()\" &&
+          node dist/infrastructure/database/seed.js &&
+          echo '✅ 数据库初始化完成，默认账号：admin / Admin@123';
+        else
+          echo '⏭  数据库已存在，跳过初始化';
+        fi
+      "
+    depends_on:
+      - server
+
+volumes:
+  finance_data:
+    driver: local
+    name: finance_data
+  finance_logs:
+    driver: local
+    name: finance_logs
+
+networks:
+  finance_net:
+    driver: bridge
+    name: finance_net
