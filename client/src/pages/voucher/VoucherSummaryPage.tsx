@@ -93,7 +93,7 @@ export default function VoucherSummaryPage() {
             onChange={v => setDateRange(v as [dayjs.Dayjs, dayjs.Dayjs] | null)}
             format="YYYY-MM-DD"
           />
-          <Button size="small" icon={<FilterOutlined />}>过滤</Button>
+          <Button size="small" icon={<FilterOutlined />} onClick={fetchData}>过滤</Button>
           <Button size="small" icon={<ReloadOutlined />} onClick={fetchData}>刷新</Button>
         </Space>
         <Space style={{ marginLeft: 16 }}>
