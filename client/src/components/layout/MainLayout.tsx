@@ -3,8 +3,9 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Layout, Menu, Dropdown, Avatar, Select, Space, Typography, Tag } from 'antd'
 import {
   DashboardOutlined, FileTextOutlined, BookOutlined, BarChartOutlined,
-  BankOutlined, AuditOutlined, TeamOutlined, SettingOutlined,
+  BankOutlined, AuditOutlined, SettingOutlined,
   UserOutlined, LogoutOutlined, LockOutlined, AppstoreOutlined,
+  ReconciliationOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { usePeriodStore } from '@/stores/periodStore'
@@ -39,6 +40,7 @@ const menuItems = [
       { key: '/reports/income-statement', label: '利润表' },
     ]
   },
+  { key: '/closing', icon: <ReconciliationOutlined />, label: '结账' },
   { key: '/assets', icon: <AppstoreOutlined />, label: '固定资产' },
   { key: '/invoices', icon: <AuditOutlined />, label: '发票管理' },
   {

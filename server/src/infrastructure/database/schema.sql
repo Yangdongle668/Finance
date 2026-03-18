@@ -342,3 +342,42 @@ CREATE TABLE IF NOT EXISTS attachments (
 CREATE INDEX IF NOT EXISTS idx_attachments_category ON attachments(category_id);
 CREATE INDEX IF NOT EXISTS idx_attachments_period   ON attachments(period_id);
 CREATE INDEX IF NOT EXISTS idx_attachments_voucher  ON attachments(voucher_id);
+
+-- ── 期末结账模板 ──────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS closing_templates (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  type        TEXT NOT NULL DEFAULT 'custom',   -- system | custom
+  system_key  TEXT,                             -- depreciation | pnl | cost_of_sales | income_tax | vat_out | surcharge_tax
+  is_enabled  INTEGER NOT NULL DEFAULT 1,
+  is_system   INTEGER NOT NULL DEFAULT 0,       -- 1=系统内置不可删除
+  sort_order  INTEGER NOT NULL DEFAULT 99,
+  voucher_word TEXT NOT NULL DEFAULT '记',
+  summary     TEXT,
+  config      TEXT,                             -- JSON 扩展配置
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS closing_template_lines (
+  id           TEXT PRIMARY KEY,
+  template_id  TEXT NOT NULL REFERENCES closing_templates(id) ON DELETE CASCADE,
+  line_no      INTEGER NOT NULL,
+  summary      TEXT NOT NULL DEFAULT '',
+  account_code TEXT NOT NULL,
+  account_name TEXT NOT NULL,
+  direction    TEXT NOT NULL,                  -- debit | credit
+  amount_type  TEXT NOT NULL DEFAULT 'balance_out', -- balance_out | balance_in | fixed
+  ratio        REAL NOT NULL DEFAULT 1.0,
+  UNIQUE(template_id, line_no)
+);
+
+CREATE TABLE IF NOT EXISTS closing_vouchers (
+  id           TEXT PRIMARY KEY,
+  template_id  TEXT NOT NULL REFERENCES closing_templates(id),
+  period_id    TEXT NOT NULL REFERENCES periods(id),
+  voucher_id   TEXT NOT NULL REFERENCES vouchers(id),
+  created_at   TEXT NOT NULL,
+  UNIQUE(template_id, period_id)
+);
