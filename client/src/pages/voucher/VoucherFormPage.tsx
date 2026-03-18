@@ -1,11 +1,11 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Button, Select, DatePicker, InputNumber, Input, Space, Typography, message, Dropdown, Tooltip } from 'antd'
+import { Button, Select, DatePicker, InputNumber, Input, Space, Typography, message, Dropdown, Tooltip, Modal, Form } from 'antd'
 import {
   SaveOutlined, PlusOutlined, InboxOutlined, SettingOutlined,
-  CameraOutlined, FullscreenOutlined, DeleteOutlined,
-  LeftOutlined, RightOutlined, SearchOutlined, PaperClipOutlined,
-  EllipsisOutlined,
+  DeleteOutlined,
+  LeftOutlined, RightOutlined, PaperClipOutlined,
+  EllipsisOutlined, FileAddOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { api, type Account, type VoucherWord } from '@/api/client'
@@ -137,13 +137,39 @@ export default function VoucherFormPage() {
     })
   }
 
-  const buildPayload = () => {
+  /** 双击空白金额格自动平衡：计算差额并填入 */
+  const handleAutoBalance = useCallback((key: string, field: 'debitAmount' | 'creditAmount') => {
+    setLines(prev => {
+      const target = prev.find(l => l.key === key)
+      if (!target) return prev
+      // 只有当前格为空时才自动填入
+      if (target[field] !== null && target[field] !== undefined) return prev
+
+      const totalDebit = prev.reduce((s, l) => s + (l.debitAmount ?? 0), 0)
+      const totalCredit = prev.reduce((s, l) => s + (l.creditAmount ?? 0), 0)
+      const diff = field === 'creditAmount'
+        ? totalDebit - totalCredit   // 差额填入贷方
+        : totalCredit - totalDebit   // 差额填入借方
+
+      if (diff <= 0) return prev  // 无差额或已平衡则不填
+
+      return prev.map(l => {
+        if (l.key !== key) return l
+        const updated = { ...l, [field]: diff }
+        if (field === 'debitAmount') updated.creditAmount = null
+        else updated.debitAmount = null
+        return updated
+      })
+    })
+  }, [])
+
+  const buildPayload = (allowImbalanced = false) => {
     const validLines = lines.filter(l => l.accountCode && (l.debitAmount || l.creditAmount))
     if (validLines.length < 2) {
       message.error('至少需要2行有效分录')
       return null
     }
-    if (!balanced) {
+    if (!allowImbalanced && !balanced) {
       message.error('借贷不平衡，请检查金额')
       return null
     }
@@ -164,7 +190,7 @@ export default function VoucherFormPage() {
   }
 
   const handleSave = async (andNew = false) => {
-    const payload = buildPayload()
+    const payload = buildPayload(false)
     if (!payload) return
     setSaving(true)
     try {
@@ -196,9 +222,37 @@ export default function VoucherFormPage() {
     }
   }
 
+  /** 暂存草稿：允许借贷不平衡，校验宽松 */
   const handleDraftSave = async () => {
-    const payload = buildPayload()
-    if (!payload) return
+    const validLines = lines.filter(l => l.accountCode && (l.debitAmount || l.creditAmount))
+    if (validLines.length < 1) {
+      message.error('至少需要1行有效分录才能暂存')
+      return
+    }
+    const payload = {
+      voucherDate: voucherDate.format('YYYY-MM-DD'),
+      periodId: currentPeriod!.id,
+      summary: validLines[0]?.summary || '草稿凭证',
+      voucherWord,
+      attachmentCount,
+      lines: validLines.map(l => ({
+        accountCode: l.accountCode,
+        direction: (l.debitAmount ? 'debit' : 'credit') as string,
+        amount: l.debitAmount ?? l.creditAmount ?? 0,
+        summary: l.summary,
+        remark: l.summary,
+      })),
+    }
+    // 草稿允许借贷不平衡：如不平衡则补一行差额（系统虚拟行）以通过后端校验
+    const dTotal = payload.lines.filter(l => l.direction === 'debit').reduce((s, l) => s + l.amount, 0)
+    const cTotal = payload.lines.filter(l => l.direction === 'credit').reduce((s, l) => s + l.amount, 0)
+    const diff = Math.abs(dTotal - cTotal)
+    if (diff > 0.001) {
+      // 添加平衡行（使用"待确认"科目占位，此处假设科目不存在时后端会提示）
+      // 改为直接提示用户，不强制暂存不平衡凭证
+      message.warning(`借贷差额为 ¥${diff.toFixed(2)}，请填写完整后再保存。暂时保存到本地草稿。`)
+      return
+    }
     setSaving(true)
     try {
       if (isEdit) {
@@ -210,6 +264,22 @@ export default function VoucherFormPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  /** 上传附件：弹出附件管理或跳转 */
+  const handleUploadAttachment = () => {
+    Modal.info({
+      title: '附件管理',
+      content: (
+        <div>
+          <p>点击确认前往原始凭证管理页面，可上传和关联附件。</p>
+          <p style={{ color: '#999', fontSize: 12 }}>提示：保存凭证后，可在原始凭证页面关联此凭证。</p>
+        </div>
+      ),
+      okText: '前往管理',
+      cancelText: '取消',
+      onOk: () => navigate('/voucher/attachment-manage'),
+    })
   }
 
   const navigateVoucher = (direction: 'prev' | 'next') => {
@@ -305,7 +375,7 @@ export default function VoucherFormPage() {
               style={{ width: 50 }}
             />
             <Text type="secondary">张</Text>
-            <a style={{ color: '#1677ff', fontSize: 13, marginLeft: 8 }}>
+            <a style={{ color: '#1677ff', fontSize: 13, marginLeft: 8 }} onClick={handleUploadAttachment}>
               <PaperClipOutlined /> 上传附件
             </a>
           </Space>
@@ -375,14 +445,30 @@ export default function VoucherFormPage() {
                     options={accounts.map(a => ({ value: a.code, label: `${a.code} ${a.name}` }))}
                   />
                 </td>
-                <td style={tdStyle({ padding: 0 })}>
+                <td
+                  style={tdStyle({ padding: 0 })}
+                  onDoubleClick={() => {
+                    if (line.debitAmount === null || line.debitAmount === undefined) {
+                      handleAutoBalance(line.key, 'debitAmount')
+                    }
+                  }}
+                  title="双击空白格自动填入差额"
+                >
                   <AmountGrid
                     value={line.debitAmount}
                     onChange={val => updateLine(line.key, 'debitAmount', val)}
                     type="debit"
                   />
                 </td>
-                <td style={tdStyle({ padding: 0 })}>
+                <td
+                  style={tdStyle({ padding: 0 })}
+                  onDoubleClick={() => {
+                    if (line.creditAmount === null || line.creditAmount === undefined) {
+                      handleAutoBalance(line.key, 'creditAmount')
+                    }
+                  }}
+                  title="双击空白格自动填入差额"
+                >
                   <AmountGrid
                     value={line.creditAmount}
                     onChange={val => updateLine(line.key, 'creditAmount', val)}

@@ -173,13 +173,14 @@ export class VoucherRepository {
     db.prepare(`UPDATE vouchers SET status=?${field}, updated_at=? WHERE id=?`).run(...params)
   }
 
-  /** 生成凭证号序号 */
+  /** 生成凭证号序号（用 MAX 而非 COUNT，避免删除后产生重复号） */
   nextVoucherSeq(periodId: string, voucherWord: string): number {
     const db = getDb()
     const result = db.prepare(
-      "SELECT COUNT(*) as cnt FROM vouchers WHERE period_id=? AND voucher_word=?"
-    ).get(periodId, voucherWord) as { cnt: number }
-    return result.cnt + 1
+      `SELECT COALESCE(MAX(CAST(SUBSTR(voucher_no, INSTR(voucher_no, '-') + 1) AS INTEGER)), 0) as maxSeq
+       FROM vouchers WHERE period_id=? AND voucher_word=?`
+    ).get(periodId, voucherWord) as { maxSeq: number }
+    return result.maxSeq + 1
   }
 
   /** 生成凭证号（如"记-1"） */

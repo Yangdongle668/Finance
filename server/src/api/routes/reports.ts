@@ -40,10 +40,15 @@ router.get('/cash-flow/:periodId', (req: Request, res: Response) => {
   ok(res, svc.cashFlowStatement(req.params.periodId))
 })
 
-// GET /api/reports/voucher-summary/:periodId?startDate=&endDate=
+// GET /api/reports/voucher-summary/:periodId?startDate=&endDate=&statusFilter=all|posted
 router.get('/voucher-summary/:periodId', (req: Request, res: Response) => {
-  const { startDate, endDate } = req.query
-  ok(res, svc.voucherSummary(req.params.periodId, startDate as string | undefined, endDate as string | undefined))
+  const { startDate, endDate, statusFilter } = req.query
+  ok(res, svc.voucherSummary(
+    req.params.periodId,
+    startDate as string | undefined,
+    endDate as string | undefined,
+    (statusFilter as string) || 'all',
+  ))
 })
 
 // GET /api/reports/dashboard/:periodId

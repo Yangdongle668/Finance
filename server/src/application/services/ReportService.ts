@@ -224,11 +224,16 @@ export class ReportService {
     }
   }
 
-  /** 凭证汇总表：按科目汇总某期间内所有已记账凭证的借贷金额 */
-  voucherSummary(periodId: string, startDate?: string, endDate?: string) {
+  /** 凭证汇总表：按科目汇总某期间内凭证的借贷金额
+   *  statusFilter: 'posted'(仅记账) | 'all'(全部非冲销) - 默认全部
+   */
+  voucherSummary(periodId: string, startDate?: string, endDate?: string, statusFilter = 'all') {
     const db = getDb()
 
-    // Aggregate by account code from posted vouchers
+    const statusCond = statusFilter === 'posted'
+      ? `AND v.status = 'posted'`
+      : `AND v.status != 'reversed'`
+
     const dateFilter = startDate && endDate
       ? `AND v.voucher_date BETWEEN ? AND ?`
       : ''
@@ -243,7 +248,7 @@ export class ReportService {
         SUM(CASE WHEN vl.direction = 'credit' THEN vl.amount ELSE 0 END) as credit_total
       FROM voucher_lines vl
       JOIN vouchers v ON vl.voucher_id = v.id
-      WHERE v.period_id = ? AND v.status = 'posted' ${dateFilter}
+      WHERE v.period_id = ? ${statusCond} ${dateFilter}
       GROUP BY vl.account_code, vl.account_name
       ORDER BY vl.account_code
     `).all(...params) as {
@@ -253,13 +258,13 @@ export class ReportService {
     // Count vouchers
     const countRow = db.prepare(`
       SELECT COUNT(*) as cnt FROM vouchers
-      WHERE period_id = ? AND status = 'posted' ${dateFilter}
+      WHERE period_id = ? ${statusCond} ${dateFilter}
     `).get(...params) as { cnt: number }
 
     // Count attachments
     const attachRow = db.prepare(`
       SELECT COALESCE(SUM(attachment_count), 0) as cnt FROM vouchers
-      WHERE period_id = ? AND status = 'posted' ${dateFilter}
+      WHERE period_id = ? ${statusCond} ${dateFilter}
     `).get(...params) as { cnt: number }
 
     return {

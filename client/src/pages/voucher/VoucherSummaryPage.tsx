@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Table, Button, Space, Typography, DatePicker } from 'antd'
+import { Table, Button, Space, Typography, DatePicker, Select } from 'antd'
 import { FilterOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -27,17 +27,15 @@ export default function VoucherSummaryPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [attachmentCount, setAttachmentCount] = useState(0)
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null)
+  const [statusFilter, setStatusFilter] = useState<string>('all')
 
   const fetchData = async () => {
     if (!currentPeriod) return
     setLoading(true)
     try {
-      const params: Record<string, string> = { periodId: currentPeriod.id }
-      if (dateRange) {
-        params.startDate = dateRange[0].format('YYYY-MM-DD')
-        params.endDate = dateRange[1].format('YYYY-MM-DD')
-      }
-      const res = await api.voucherSummary(currentPeriod.id, params.startDate, params.endDate)
+      const startDate = dateRange ? dateRange[0].format('YYYY-MM-DD') : undefined
+      const endDate = dateRange ? dateRange[1].format('YYYY-MM-DD') : undefined
+      const res = await api.voucherSummary(currentPeriod.id, startDate, endDate, statusFilter)
       setData(res.data.data.rows)
       setTotalCount(res.data.data.totalVouchers)
       setAttachmentCount(res.data.data.totalAttachments)
@@ -46,7 +44,7 @@ export default function VoucherSummaryPage() {
     }
   }
 
-  useEffect(() => { fetchData() }, [currentPeriod?.id])
+  useEffect(() => { fetchData() }, [currentPeriod?.id, statusFilter])
 
   const periodStartDate = currentPeriod ? dayjs(currentPeriod.startDate) : dayjs()
   const periodEndDate = currentPeriod ? dayjs(currentPeriod.endDate) : dayjs()
@@ -92,6 +90,17 @@ export default function VoucherSummaryPage() {
             value={dateRange ?? [periodStartDate, periodEndDate]}
             onChange={v => setDateRange(v as [dayjs.Dayjs, dayjs.Dayjs] | null)}
             format="YYYY-MM-DD"
+          />
+          <Text type="secondary">凭证状态</Text>
+          <Select
+            size="small"
+            style={{ width: 120 }}
+            value={statusFilter}
+            onChange={v => setStatusFilter(v)}
+            options={[
+              { value: 'all', label: '全部凭证' },
+              { value: 'posted', label: '仅已记账' },
+            ]}
           />
           <Button size="small" icon={<FilterOutlined />} onClick={fetchData}>过滤</Button>
           <Button size="small" icon={<ReloadOutlined />} onClick={fetchData}>刷新</Button>
