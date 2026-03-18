@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Card, Descriptions, Table, Tag, Button, Space, Typography, Steps, message, Popconfirm, Divider } from 'antd'
-import { ArrowLeftOutlined, CheckOutlined, CloseOutlined, RetweetOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, CheckOutlined, CloseOutlined, RetweetOutlined, EditOutlined, SendOutlined, PrinterOutlined } from '@ant-design/icons'
 import { api, type Voucher, type VoucherLine } from '@/api/client'
 
 const { Title, Text } = Typography
@@ -23,8 +23,8 @@ export default function VoucherDetailPage() {
 
   if (!voucher) return null
 
-  const totalDebit = (voucher.lines ?? []).filter(l => l.direction === 'debit').reduce((s, l) => s + l.amount, 0)
-  const totalCredit = (voucher.lines ?? []).filter(l => l.direction === 'credit').reduce((s, l) => s + l.amount, 0)
+  const totalDebit = (voucher.lines ?? []).filter(l => l.direction === 'debit').reduce((s, l) => s + l.amount / 100, 0)
+  const totalCredit = (voucher.lines ?? []).filter(l => l.direction === 'credit').reduce((s, l) => s + l.amount / 100, 0)
 
   const lineColumns = [
     { title: '行号', dataIndex: 'lineNo' as keyof VoucherLine, width: 60 },
@@ -33,7 +33,7 @@ export default function VoucherDetailPage() {
       render: (v: string) => v === 'debit' ? <Text className="debit-col">借</Text> : <Text className="credit-col">贷</Text>
     },
     { title: '科目', render: (_: unknown, r: VoucherLine) => `${r.accountCode} ${r.accountName}` },
-    { title: '金额（元）', dataIndex: 'amount' as keyof VoucherLine, align: 'right' as const, render: (v: number) => v.toFixed(2) },
+    { title: '金额（元）', dataIndex: 'amount' as keyof VoucherLine, align: 'right' as const, render: (v: number) => (v / 100).toFixed(2) },
     { title: '备注', dataIndex: 'remark' as keyof VoucherLine },
   ]
 
@@ -48,6 +48,13 @@ export default function VoucherDetailPage() {
           </Tag>
         </Space>
         <Space>
+          {voucher.status === 'draft' && <>
+            <Button icon={<EditOutlined />} onClick={() => navigate(`/vouchers/${id}/edit`)}>编辑</Button>
+            <Button type="primary" icon={<SendOutlined />} onClick={async () => { await api.submitVoucher(id!); message.success('已提交审核'); fetch() }}>提交审核</Button>
+            <Popconfirm title="确认删除此凭证？" onConfirm={async () => { await api.deleteVoucher(id!); message.success('已删除'); navigate('/vouchers') }}>
+              <Button danger>删除</Button>
+            </Popconfirm>
+          </>}
           {voucher.status === 'pending' && <>
             <Popconfirm title="确认驳回此凭证？" onConfirm={async () => { await api.rejectVoucher(id!); message.success('已驳回'); fetch() }}>
               <Button danger icon={<CloseOutlined />}>驳回</Button>
@@ -62,6 +69,7 @@ export default function VoucherDetailPage() {
               <Button danger icon={<RetweetOutlined />}>红字冲销</Button>
             </Popconfirm>
           )}
+          <Button icon={<PrinterOutlined />} onClick={() => window.print()}>打印</Button>
         </Space>
       </div>
 

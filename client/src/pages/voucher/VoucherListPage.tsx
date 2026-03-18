@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Table, Button, Space, Select, Typography, Popconfirm, message, Checkbox, Dropdown, Tooltip } from 'antd'
+import { Table, Button, Space, Select, Typography, Popconfirm, message, Checkbox, Dropdown, Tooltip, Input, Modal } from 'antd'
 import {
   PlusOutlined, FilterOutlined, ReloadOutlined,
   EditOutlined, DeleteOutlined, MoreOutlined,
   CheckOutlined, PrinterOutlined, ImportOutlined, ExportOutlined,
-  EyeOutlined,
+  EyeOutlined, SearchOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { api, type Voucher, type VoucherLine } from '@/api/client'
@@ -67,6 +67,8 @@ function flattenVouchers(vouchers: Voucher[]): FlatRow[] {
 
 const fmtAmount = (v: number) => v > 0 ? v.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''
 
+const STATUS_LABELS: Record<string, string> = { draft: '草稿', pending: '待审核', approved: '已审核', posted: '已记账', reversed: '已冲销' }
+
 export default function VoucherListPage() {
   const navigate = useNavigate()
   const currentPeriod = usePeriodStore(s => s.currentPeriod)
@@ -78,30 +80,44 @@ export default function VoucherListPage() {
   const [showSubtotal, setShowSubtotal] = useState(false)
   const [filters, setFilters] = useState({ page: 1, pageSize: 20, status: '', keyword: '' })
   const [periodRange, setPeriodRange] = useState<[string, string]>(['', ''])
+  const [showFilter, setShowFilter] = useState(false)
 
-  const fetchData = async () => {
+  const startPeriodId = periodRange[0] || currentPeriod?.id || ''
+  const endPeriodId = periodRange[1] || currentPeriod?.id || ''
+  const startP = periods.find(p => p.id === startPeriodId)
+  const endP = periods.find(p => p.id === endPeriodId)
+  const isMultiPeriod = startPeriodId !== endPeriodId
+
+  const fetchData = useCallback(async () => {
     if (!currentPeriod) return
     setLoading(true)
     try {
-      const startPeriod = periodRange[0] || currentPeriod.id
-      const endPeriod = periodRange[1] || currentPeriod.id
-      const startP = periods.find(p => p.id === startPeriod)
-      const endP = periods.find(p => p.id === endPeriod)
-      const res = await api.listVouchers({
-        ...filters,
-        periodId: currentPeriod.id,
-        startDate: startP?.startDate,
-        endDate: endP?.endDate,
+      const params: Record<string, unknown> = {
+        page: filters.page,
+        pageSize: filters.pageSize,
         includeLines: true,
-      })
+      }
+      if (filters.status) params.status = filters.status
+      if (filters.keyword) params.keyword = filters.keyword
+
+      if (isMultiPeriod) {
+        // Cross-period query: use date range, no single periodId
+        if (startP) params.startDate = startP.startDate
+        if (endP) params.endDate = endP.endDate
+      } else {
+        // Single period query: just use periodId
+        params.periodId = startPeriodId
+      }
+
+      const res = await api.listVouchers(params as never)
       setData(res.data.data)
       setTotal(res.data.total)
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentPeriod, filters, startPeriodId, endPeriodId, isMultiPeriod, startP, endP])
 
-  useEffect(() => { fetchData() }, [currentPeriod?.id, filters])
+  useEffect(() => { fetchData() }, [fetchData])
 
   const handleDelete = async (id: string) => {
     await api.deleteVoucher(id)
@@ -109,13 +125,78 @@ export default function VoucherListPage() {
     fetchData()
   }
 
+  const handleBatchApprove = async () => {
+    const voucherIds = [...new Set(selected.map(k => k.split('_')[0]))]
+    let success = 0
+    for (const vid of voucherIds) {
+      try { await api.approveVoucher(vid); success++ } catch { /* skip */ }
+    }
+    message.success(`成功审核 ${success} 张凭证`)
+    setSelected([])
+    fetchData()
+  }
+
+  const handleBatchUnapprove = async () => {
+    const voucherIds = [...new Set(selected.map(k => k.split('_')[0]))]
+    let success = 0
+    for (const vid of voucherIds) {
+      try { await api.rejectVoucher(vid); success++ } catch { /* skip */ }
+    }
+    message.success(`成功取消审核 ${success} 张凭证`)
+    setSelected([])
+    fetchData()
+  }
+
+  const handleBatchPost = async () => {
+    const voucherIds = [...new Set(selected.map(k => k.split('_')[0]))]
+    try {
+      const res = await api.batchPostVouchers(voucherIds)
+      message.success(`成功记账 ${res.data.data.success} 张凭证`)
+    } catch { /* error handled by interceptor */ }
+    setSelected([])
+    fetchData()
+  }
+
+  const handleBatchDelete = async () => {
+    const voucherIds = [...new Set(selected.map(k => k.split('_')[0]))]
+    let success = 0
+    for (const vid of voucherIds) {
+      try { await api.deleteVoucher(vid); success++ } catch { /* skip */ }
+    }
+    message.success(`成功删除 ${success} 张凭证`)
+    setSelected([])
+    fetchData()
+  }
+
+  const handlePrint = () => {
+    window.print()
+  }
+
+  const handleExportExcel = () => {
+    const headers = ['日期', '凭证字号', '摘要', '科目编码', '科目名称', '借方金额', '贷方金额']
+    const rows = flatRows.map(r => [
+      r.voucherDate, r.voucherNo, r.summary, r.accountCode, r.accountName,
+      r.debitAmount > 0 ? r.debitAmount.toFixed(2) : '',
+      r.creditAmount > 0 ? r.creditAmount.toFixed(2) : '',
+    ])
+    const csvContent = [headers, ...rows].map(row => row.map(c => `"${c}"`).join(',')).join('\n')
+    const BOM = '\uFEFF'
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `凭证_${startP?.name || ''}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    message.success('导出成功')
+  }
+
   const flatRows = flattenVouchers(data)
   const totalDebit = flatRows.reduce((s, r) => s + r.debitAmount, 0)
   const totalCredit = flatRows.reduce((s, r) => s + r.creditAmount, 0)
 
-  const currentPeriodLabel = currentPeriod
-    ? `${currentPeriod.year}年${String(currentPeriod.month).padStart(2, '0')}期`
-    : ''
+  const startPeriodLabel = startP ? `${startP.year}年${String(startP.month).padStart(2, '0')}期` : ''
+  const endPeriodLabel = endP ? `${endP.year}年${String(endP.month).padStart(2, '0')}期` : ''
 
   const columns: ColumnsType<FlatRow> = [
     {
@@ -134,8 +215,13 @@ export default function VoucherListPage() {
             )}
             <Dropdown menu={{ items: [
               { key: 'view', label: '查看详情', onClick: () => navigate(`/vouchers/${r.voucherId}`) },
-              ...(r.status === 'draft' ? [{ key: 'submit', label: '提交审核', onClick: async () => { await api.submitVoucher(r.voucherId); fetchData() } }] : []),
-              ...(r.status === 'pending' ? [{ key: 'approve', label: '审核通过', onClick: async () => { await api.approveVoucher(r.voucherId); fetchData() } }] : []),
+              ...(r.status === 'draft' ? [{ key: 'submit', label: '提交审核', onClick: async () => { await api.submitVoucher(r.voucherId); message.success('已提交审核'); fetchData() } }] : []),
+              ...(r.status === 'pending' ? [
+                { key: 'approve', label: '审核通过', onClick: async () => { await api.approveVoucher(r.voucherId); message.success('审核通过'); fetchData() } },
+                { key: 'reject', label: '驳回', onClick: async () => { await api.rejectVoucher(r.voucherId); message.success('已驳回'); fetchData() } },
+              ] : []),
+              ...(r.status === 'approved' ? [{ key: 'post', label: '记账', onClick: async () => { await api.postVoucher(r.voucherId); message.success('记账成功'); fetchData() } }] : []),
+              ...(r.status === 'posted' ? [{ key: 'reverse', label: '红字冲销', onClick: async () => { await api.reverseVoucher(r.voucherId); message.success('冲销成功'); fetchData() } }] : []),
             ] }}>
               <a><MoreOutlined /></a>
             </Dropdown>
@@ -171,8 +257,8 @@ export default function VoucherListPage() {
       render: (v: number) => <Text>{fmtAmount(v)}</Text>,
     },
     {
-      title: <><EyeOutlined /></>, width: 70, align: 'center',
-      render: (_, r) => r.lineIndex === 0 ? <a style={{ color: '#1677ff', fontSize: 12 }}>上传</a> : null,
+      title: '状态', width: 80, align: 'center',
+      render: (_, r) => r.lineIndex === 0 ? <Text type="secondary" style={{ fontSize: 12 }}>{STATUS_LABELS[r.status] || r.status}</Text> : null,
       onCell: (r) => ({ rowSpan: r.lineIndex === 0 ? r.lineCount : 0 }),
     },
   ]
@@ -184,16 +270,22 @@ export default function VoucherListPage() {
       {/* Combined filter + action bar */}
       <div style={{ padding: '8px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         <Space wrap>
-          <Dropdown
-            menu={{ items: periods.map(p => ({ key: p.id, label: p.name })) }}
-            trigger={['click']}
-          >
-            <Button size="small">凭证期间 ▾</Button>
-          </Dropdown>
-          <Text type="secondary" style={{ fontSize: 13 }}>
-            {currentPeriodLabel} ~ {currentPeriodLabel}
-          </Text>
-          <Button size="small" icon={<FilterOutlined />}>过滤</Button>
+          <Select
+            size="small"
+            style={{ width: 130 }}
+            value={startPeriodId}
+            onChange={v => setPeriodRange([v, periodRange[1] || v])}
+            options={periods.map(p => ({ value: p.id, label: p.name }))}
+          />
+          <Text type="secondary">~</Text>
+          <Select
+            size="small"
+            style={{ width: 130 }}
+            value={endPeriodId}
+            onChange={v => setPeriodRange([periodRange[0] || v, v])}
+            options={periods.map(p => ({ value: p.id, label: p.name }))}
+          />
+          <Button size="small" icon={<FilterOutlined />} onClick={() => setShowFilter(!showFilter)}>过滤</Button>
           <Checkbox checked={showSubtotal} onChange={e => setShowSubtotal(e.target.checked)}>
             <Text style={{ fontSize: 13 }}>显示凭证金额小计</Text>
           </Checkbox>
@@ -202,34 +294,71 @@ export default function VoucherListPage() {
 
         <Space wrap>
           <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => navigate('/vouchers/new')}>新增</Button>
-          <Dropdown menu={{ items: [{ key: 'approve', label: '批量审核' }, { key: 'unapprove', label: '取消审核' }] }}>
-            <Button size="small">审核</Button>
+          <Dropdown menu={{ items: [
+            { key: 'approve', label: '批量审核', onClick: handleBatchApprove },
+            { key: 'unapprove', label: '取消审核', onClick: handleBatchUnapprove },
+          ] }}>
+            <Button size="small" icon={<CheckOutlined />}>审核</Button>
           </Dropdown>
-          <Dropdown menu={{ items: [{ key: 'print', label: '打印凭证' }] }}>
-            <Button size="small">打印</Button>
-          </Dropdown>
-          <Button size="small" icon={<ImportOutlined />}>导入</Button>
-          <Dropdown menu={{ items: [{ key: 'excel', label: '导出Excel' }, { key: 'pdf', label: '导出PDF' }] }}>
-            <Button size="small">导出</Button>
+          <Button size="small" icon={<PrinterOutlined />} onClick={handlePrint}>打印</Button>
+          <Dropdown menu={{ items: [
+            { key: 'excel', label: '导出CSV', onClick: handleExportExcel },
+          ] }}>
+            <Button size="small" icon={<ExportOutlined />}>导出</Button>
           </Dropdown>
           {selected.length > 0 && (
-            <Popconfirm title={`确认删除 ${selected.length} 张凭证？`} onConfirm={async () => {
-              for (const sid of selected) { try { await api.deleteVoucher(sid) } catch { /* skip */ } }
-              setSelected([])
-              fetchData()
-            }}>
+            <Popconfirm title={`确认删除 ${selected.length} 张凭证？`} onConfirm={handleBatchDelete}>
               <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
             </Popconfirm>
           )}
           <Dropdown menu={{ items: [
-            { key: 'batch-post', label: '批量记账' },
-            { key: 'batch-delete', label: '批量删除' },
-            { key: 'sort', label: '凭证整理' },
+            { key: 'batch-post', label: '批量记账', onClick: handleBatchPost },
+            { key: 'batch-delete', label: '批量删除', onClick: () => {
+              if (selected.length === 0) { message.warning('请先选择凭证'); return }
+              Modal.confirm({ title: '确认批量删除？', content: `即将删除 ${selected.length} 张凭证`, onOk: handleBatchDelete })
+            }},
           ] }}>
             <Button size="small">更多</Button>
           </Dropdown>
         </Space>
       </div>
+
+      {/* Filter row */}
+      {showFilter && (
+        <div style={{ padding: '8px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', gap: 12, alignItems: 'center' }}>
+          <Space>
+            <Text type="secondary" style={{ fontSize: 13 }}>状态</Text>
+            <Select
+              size="small"
+              style={{ width: 120 }}
+              value={filters.status}
+              onChange={v => setFilters(f => ({ ...f, status: v, page: 1 }))}
+              allowClear
+              placeholder="全部"
+              options={[
+                { value: '', label: '全部' },
+                { value: 'draft', label: '草稿' },
+                { value: 'pending', label: '待审核' },
+                { value: 'approved', label: '已审核' },
+                { value: 'posted', label: '已记账' },
+                { value: 'reversed', label: '已冲销' },
+              ]}
+            />
+          </Space>
+          <Space>
+            <Text type="secondary" style={{ fontSize: 13 }}>关键字</Text>
+            <Input
+              size="small"
+              style={{ width: 180 }}
+              placeholder="凭证号/摘要"
+              value={filters.keyword}
+              onChange={e => setFilters(f => ({ ...f, keyword: e.target.value, page: 1 }))}
+              allowClear
+              suffix={<SearchOutlined style={{ color: '#999' }} />}
+            />
+          </Space>
+        </div>
+      )}
 
       {/* Table */}
       <div style={{ flex: 1, padding: '0 16px' }}>

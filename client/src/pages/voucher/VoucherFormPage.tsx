@@ -56,16 +56,32 @@ export default function VoucherFormPage() {
   const [attachmentCount, setAttachmentCount] = useState(0)
   const [lines, setLines] = useState<LineItem[]>([emptyLine(), emptyLine(), emptyLine(), emptyLine()])
   const [saving, setSaving] = useState(false)
+  const [allVoucherIds, setAllVoucherIds] = useState<string[]>([])
 
   useEffect(() => {
     api.leafAccounts().then(r => setAccounts(r.data.data))
   }, [])
+
+  // Load list of voucher IDs for prev/next navigation
+  useEffect(() => {
+    if (!currentPeriod) return
+    api.listVouchers({ periodId: currentPeriod.id, pageSize: 1000 }).then(r => {
+      setAllVoucherIds(r.data.data.map(v => v.id))
+    })
+  }, [currentPeriod?.id])
 
   useEffect(() => {
     if (!currentPeriod || isEdit) return
     api.getNextVoucherNo(currentPeriod.id, voucherWord).then(r => {
       setVoucherNo(r.data.data.voucherNo)
     })
+    // Default date constrained to current period
+    const now = dayjs()
+    const periodStart = dayjs(currentPeriod.startDate)
+    const periodEnd = dayjs(currentPeriod.endDate)
+    if (now.isBefore(periodStart)) setVoucherDate(periodStart)
+    else if (now.isAfter(periodEnd)) setVoucherDate(periodEnd)
+    else setVoucherDate(now)
   }, [currentPeriod?.id, voucherWord, isEdit])
 
   useEffect(() => {
@@ -162,8 +178,13 @@ export default function VoucherFormPage() {
       if (andNew) {
         setLines([emptyLine(), emptyLine(), emptyLine(), emptyLine()])
         setAttachmentCount(0)
-        setVoucherDate(dayjs())
         if (currentPeriod) {
+          const now = dayjs()
+          const periodStart = dayjs(currentPeriod.startDate)
+          const periodEnd = dayjs(currentPeriod.endDate)
+          if (now.isBefore(periodStart)) setVoucherDate(periodStart)
+          else if (now.isAfter(periodEnd)) setVoucherDate(periodEnd)
+          else setVoucherDate(now)
           const r = await api.getNextVoucherNo(currentPeriod.id, voucherWord)
           setVoucherNo(r.data.data.voucherNo)
         }
@@ -173,6 +194,34 @@ export default function VoucherFormPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleDraftSave = async () => {
+    const payload = buildPayload()
+    if (!payload) return
+    setSaving(true)
+    try {
+      if (isEdit) {
+        await api.updateVoucher(id!, payload)
+      } else {
+        await api.createVoucher(payload)
+      }
+      message.success('已暂存为草稿')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const navigateVoucher = (direction: 'prev' | 'next') => {
+    if (!id || allVoucherIds.length === 0) return
+    const currentIdx = allVoucherIds.indexOf(id)
+    if (currentIdx === -1) return
+    const newIdx = direction === 'prev' ? currentIdx - 1 : currentIdx + 1
+    if (newIdx < 0 || newIdx >= allVoucherIds.length) {
+      message.info(direction === 'prev' ? '已是第一张凭证' : '已是最后一张凭证')
+      return
+    }
+    navigate(`/vouchers/${allVoucherIds[newIdx]}/edit`)
   }
 
   const periodLabel = currentPeriod ? `${currentPeriod.year}年第${currentPeriod.month}期` : ''
@@ -192,21 +241,20 @@ export default function VoucherFormPage() {
           <Button loading={saving} onClick={() => handleSave(false)}>
             保存
           </Button>
-          <Dropdown menu={{ items: [{ key: 'draft', label: '暂存为草稿' }] }}>
-            <Button><InboxOutlined /> 暂存</Button>
-          </Dropdown>
-          <Dropdown menu={{ items: [{ key: 'none', label: '暂无模板' }] }}>
+          <Button loading={saving} onClick={handleDraftSave} icon={<InboxOutlined />}>
+            暂存
+          </Button>
+          <Dropdown menu={{ items: [{ key: 'none', label: '暂无模板', disabled: true }] }}>
             <Button>模板</Button>
           </Dropdown>
-          <Button>偏好设置</Button>
-          <Button icon={<CameraOutlined />} type="text" />
         </Space>
         <Space>
-          <Tooltip title="快捷键"><Text type="secondary" style={{ cursor: 'pointer', fontSize: 13 }}>⌨ 快捷键</Text></Tooltip>
-          <Tooltip title="大屏模式"><Text type="secondary" style={{ cursor: 'pointer', fontSize: 13 }}>⊞ 大屏</Text></Tooltip>
-          <Tooltip title="护眼模式"><Text type="secondary" style={{ cursor: 'pointer', fontSize: 13 }}>👁 护眼</Text></Tooltip>
-          <Button type="text" size="small" icon={<LeftOutlined />} />
-          <Button type="text" size="small" icon={<RightOutlined />} />
+          <Tooltip title="上一张凭证">
+            <Button type="text" size="small" icon={<LeftOutlined />} disabled={!isEdit} onClick={() => navigateVoucher('prev')} />
+          </Tooltip>
+          <Tooltip title="下一张凭证">
+            <Button type="text" size="small" icon={<RightOutlined />} disabled={!isEdit} onClick={() => navigateVoucher('next')} />
+          </Tooltip>
         </Space>
       </div>
 
@@ -392,9 +440,9 @@ export default function VoucherFormPage() {
           <Button loading={saving} onClick={() => handleSave(false)}>
             保存
           </Button>
-          <Dropdown menu={{ items: [{ key: 'draft', label: '暂存为草稿' }] }}>
-            <Button>暂存</Button>
-          </Dropdown>
+          <Button loading={saving} onClick={handleDraftSave}>
+            暂存
+          </Button>
         </Space>
       </div>
     </div>
