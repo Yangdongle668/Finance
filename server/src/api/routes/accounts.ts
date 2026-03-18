@@ -38,6 +38,23 @@ router.patch('/:code', (req: Request, res: Response) => {
   ok(res, null, '科目更新成功')
 })
 
+// DELETE /api/accounts/:code
+router.delete('/:code', (req: Request, res: Response) => {
+  const code = req.params.code
+  const account = repo.findByCode(code)
+  if (!account) { res.status(404).json({ code: 404, message: '科目不存在' }); return }
+  // 检查是否有子科目
+  const children = repo.findAll().filter(a => a.parentCode === code)
+  if (children.length > 0) { res.status(400).json({ code: 400, message: '该科目下有子科目，无法删除' }); return }
+  // 检查是否有凭证引用
+  const { getDb } = require('../../infrastructure/database/db')
+  const db = getDb()
+  const used = db.prepare('SELECT COUNT(*) as cnt FROM voucher_lines WHERE account_code=?').get(code) as { cnt: number }
+  if (used.cnt > 0) { res.status(400).json({ code: 400, message: '该科目已被凭证使用，无法删除' }); return }
+  repo.delete(code)
+  ok(res, null, '科目删除成功')
+})
+
 // GET /api/accounts/balances/:periodId
 router.get('/balances/:periodId', (req: Request, res: Response) => {
   ok(res, repo.getBalances(req.params.periodId))

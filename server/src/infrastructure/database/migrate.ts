@@ -1,16 +1,20 @@
 import fs from 'fs'
 import path from 'path'
-import { getDb } from './db'
+import { getMasterDb, getCompanyDb } from './db'
 import { logger } from '../logger'
 
 export function runMigrations(): void {
-  const db = getDb()
+  // Master DB is self-initializing in getMasterDb()
+  getMasterDb()
+  logger.info('Master database ready')
+}
+
+export function runCompanyMigrations(companyId: string): void {
+  const db = getCompanyDb(companyId)
   const schemaPath = path.join(__dirname, 'schema.sql')
   const sql = fs.readFileSync(schemaPath, 'utf-8')
-
-  // Execute all statements in the schema
   db.exec(sql)
-  logger.info('Database migrations completed')
+  logger.info(`Company ${companyId} database migrations completed`)
 }
 
 if (require.main === module) {

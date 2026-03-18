@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
+import { useCompanyStore } from '@/stores/companyStore'
 import MainLayout from '@/components/layout/MainLayout'
 import LoginPage from '@/pages/LoginPage'
+import CompanySelectPage from '@/pages/CompanySelectPage'
 import DashboardPage from '@/pages/dashboard/DashboardPage'
 import VoucherListPage from '@/pages/voucher/VoucherListPage'
 import VoucherFormPage from '@/pages/voucher/VoucherFormPage'
@@ -22,12 +24,19 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function RequireCompany({ children }: { children: React.ReactNode }) {
+  const currentCompany = useCompanyStore(s => s.currentCompany)
+  if (!currentCompany) return <Navigate to="/companies" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/" element={<RequireAuth><MainLayout /></RequireAuth>}>
+        <Route path="/companies" element={<RequireAuth><CompanySelectPage /></RequireAuth>} />
+        <Route path="/" element={<RequireAuth><RequireCompany><MainLayout /></RequireCompany></RequireAuth>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
           {/* 凭证 */}

@@ -31,8 +31,8 @@ export default function LoginPage() {
         <Space direction="vertical" size={24} style={{ width: '100%' }}>
           <div style={{ textAlign: 'center' }}>
             <BankOutlined style={{ fontSize: 48, color: '#1677ff', marginBottom: 12 }} />
-            <Title level={3} style={{ margin: 0 }}>精斗云云会计</Title>
-            <Text type="secondary">专为个人/小微企业设计的云端财务管理系统</Text>
+            <Title level={3} style={{ margin: 0 }}>乐算云会计</Title>
+            <Text type="secondary">云端财务管理系统</Text>
           </div>
 
           <Form onFinish={onFinish} size="large">
@@ -50,7 +50,7 @@ export default function LoginPage() {
           </Form>
 
           <Text type="secondary" style={{ display: 'block', textAlign: 'center', fontSize: 12 }}>
-            默认账号：admin / Admin@123
+            专为个人/小微企业设计的云端财务管理系统
           </Text>
         </Space>
       </Card>

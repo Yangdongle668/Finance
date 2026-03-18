@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Table, Card, Button, Space, Tag, Typography, Modal, Form, Input, InputNumber, Select, DatePicker, Tabs, Statistic, Row, Col, message } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
+import { Table, Card, Button, Space, Tag, Typography, Modal, Form, Input, InputNumber, Select, DatePicker, Tabs, Statistic, Row, Col, Upload, message } from 'antd'
+import { PlusOutlined, UploadOutlined, FileImageOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { api, type Invoice, type InvoiceStats } from '@/api/client'
 
@@ -13,6 +13,8 @@ const STATUS_LABELS: Record<string, string> = {
   pending: '待认证', certified: '已认证', deducted: '已抵扣', voided: '已作废'
 }
 
+const IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/bmp', 'image/webp']
+
 export default function InvoicePage() {
   const [direction, setDirection] = useState<'input' | 'output'>('input')
   const [invoices, setInvoices] = useState<Invoice[]>([])
@@ -22,6 +24,7 @@ export default function InvoicePage() {
   const [form] = Form.useForm()
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
+  const [uploading, setUploading] = useState(false)
 
   const refresh = async () => {
     setLoading(true)
@@ -47,6 +50,53 @@ export default function InvoicePage() {
     refresh()
   }
 
+  const handleFileUpload = async (file: File) => {
+    setUploading(true)
+    try {
+      const isImage = IMAGE_TYPES.includes(file.type) || /\.(jpe?g|png|bmp|webp)$/i.test(file.name)
+      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
+
+      let res
+      if (isPdf) {
+        res = await api.parseInvoicePdf(file)
+      } else if (isImage) {
+        message.loading({ content: '正在OCR识别图片，请稍候...', key: 'ocr', duration: 0 })
+        res = await api.parseInvoiceImage(file)
+        message.destroy('ocr')
+      } else {
+        message.warning('不支持的文件格式')
+        return false
+      }
+
+      const parsed = res.data.data
+      form.resetFields()
+      form.setFieldsValue({
+        invoiceType: parsed.invoiceType || 'vat_general',
+        invoiceNo: parsed.invoiceNo || '',
+        invoiceCode: parsed.invoiceCode || '',
+        invoiceDate: parsed.invoiceDate ? dayjs(parsed.invoiceDate) : dayjs(),
+        sellerName: parsed.sellerName || '',
+        amountExTax: parsed.amountExTax || undefined,
+        taxRate: parsed.taxRate || 0.13,
+        remark: parsed.rawText ? `[${isPdf ? 'PDF' : '图片'}解析] ${parsed.rawText.substring(0, 200)}` : '',
+      })
+      setShowForm(true)
+
+      if (parsed.ocrFailed) {
+        message.warning('图片OCR识别效果不佳，请手动填写发票信息')
+      } else {
+        message.success(`${isPdf ? 'PDF' : '图片'}解析完成，请核对信息后提交`)
+      }
+    } catch {
+      message.warning('文件解析失败，请手动录入')
+      form.resetFields()
+      setShowForm(true)
+    } finally {
+      setUploading(false)
+    }
+    return false
+  }
+
   const inputStats = stats.find(s => s.direction === 'input')
   const outputStats = stats.find(s => s.direction === 'output')
 
@@ -70,7 +120,18 @@ export default function InvoicePage() {
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Title level={4} style={{ margin: 0 }}>发票管理</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setShowForm(true)}>录入发票</Button>
+        <Space>
+          <Upload
+            accept=".pdf,.jpg,.jpeg,.png,.bmp,.webp"
+            showUploadList={false}
+            beforeUpload={handleFileUpload}
+          >
+            <Button icon={<UploadOutlined />} loading={uploading}>
+              导入发票（PDF/图片）
+            </Button>
+          </Upload>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setShowForm(true) }}>手动录入</Button>
+        </Space>
       </div>
 
       <Row gutter={16}>

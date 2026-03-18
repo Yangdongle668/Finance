@@ -74,7 +74,6 @@ export class ReportService {
       direction: string; amount: number; remark: string | null; voucher_id: string
     }[]
 
-    // 获取期初余额
     const balanceRow = db.prepare(
       'SELECT opening_debit, opening_credit FROM account_balances WHERE account_code=? AND period_id=?'
     ).get(accountCode, periodId) as { opening_debit: number; opening_credit: number } | undefined
@@ -187,21 +186,21 @@ export class ReportService {
       .filter(r => codes.some(c => r.accountCode.startsWith(c)))
       .reduce((s, r) => s + r.debitAmount - r.creditAmount, 0)
 
-    const revenue = -get(['6001', '6051'])                      // 营业收入（贷方）
-    const costOfGoods = get(['6401'])                           // 营业成本
+    const revenue = -get(['6001', '6051'])
+    const costOfGoods = get(['6401'])
     const grossProfit = revenue - costOfGoods
 
-    const sellingExp = get(['6601'])                            // 销售费用
-    const adminExp = get(['6602'])                              // 管理费用
-    const financeExp = get(['6603'])                            // 财务费用
-    const rdExp = get(['6604'])                                 // 研发费用
+    const sellingExp = get(['6601'])
+    const adminExp = get(['6602'])
+    const financeExp = get(['6603'])
+    const rdExp = get(['6604'])
     const operatingProfit = grossProfit - sellingExp - adminExp - financeExp - rdExp
 
-    const nonOpIncome = -get(['6301'])                          // 营业外收入
-    const nonOpExpense = get(['6711'])                          // 营业外支出
+    const nonOpIncome = -get(['6301'])
+    const nonOpExpense = get(['6711'])
     const profitBeforeTax = operatingProfit + nonOpIncome - nonOpExpense
 
-    const incomeTax = get(['6801'])                             // 所得税费用
+    const incomeTax = get(['6801'])
     const netProfit = profitBeforeTax - incomeTax
 
     return {
@@ -250,54 +249,237 @@ export class ReportService {
     }
   }
 
-  /** 财务分析仪表板 */
+  /** 财务分析仪表板（增强版） */
   dashboard(periodId: string) {
     const db = getDb()
     const income = this.incomeStatement(periodId)
     const bs = this.balanceSheet(periodId)
 
-    // 资金余额
-    const cashBalance = db.prepare(`
-      SELECT COALESCE(SUM(CASE WHEN direction='debit' THEN amount ELSE -amount END), 0) as bal
-      FROM voucher_lines vl JOIN vouchers v ON vl.voucher_id=v.id
-      WHERE vl.account_code LIKE '1001%' AND v.period_id=? AND v.status='posted'
-    `).get(periodId) as { bal: number }
+    // Get period info to find previous and same period last year
+    const period = this.periodRepo.findById(periodId)
+    let prevIncome: ReturnType<ReportService['incomeStatement']> | null = null
+    let sameLastYearIncome: ReturnType<ReportService['incomeStatement']> | null = null
 
-    const bankBalance = db.prepare(`
-      SELECT COALESCE(SUM(CASE WHEN direction='debit' THEN amount ELSE -amount END), 0) as bal
-      FROM voucher_lines vl JOIN vouchers v ON vl.voucher_id=v.id
-      WHERE vl.account_code LIKE '1002%' AND v.period_id=? AND v.status='posted'
-    `).get(periodId) as { bal: number }
+    if (period) {
+      // Previous period
+      const prevMonth = period.month === 1 ? 12 : period.month - 1
+      const prevYear = period.month === 1 ? period.year - 1 : period.year
+      const prevPeriod = this.periodRepo.findByYearMonth(prevYear, prevMonth)
+      if (prevPeriod) {
+        prevIncome = this.incomeStatement(prevPeriod.id)
+      }
 
+      // Same period last year
+      const lastYearPeriod = this.periodRepo.findByYearMonth(period.year - 1, period.month)
+      if (lastYearPeriod) {
+        sameLastYearIncome = this.incomeStatement(lastYearPeriod.id)
+      }
+    }
+
+    // Fund balance
+    const getAccountBalance = (prefix: string) => {
+      const trial = this.trialBalance(periodId)
+      return trial
+        .filter(r => r.accountCode.startsWith(prefix))
+        .reduce((s, r) => s + r.closingDebit - r.closingCredit, 0)
+    }
+
+    const bankBalance = getAccountBalance('1002')
+    const cashBalance = getAccountBalance('1001')
+    const totalFunds = bankBalance + cashBalance
+
+    // Receivable/Payable
+    const receivable = getAccountBalance('1122')
+    const payable = Math.abs(getAccountBalance('2202'))
+    const prepaid = getAccountBalance('1123')
+    const advanceReceipt = Math.abs(getAccountBalance('2203'))
+
+    // Short-term receivable/payable (approximation: use total)
+    const shortTermReceivable = receivable
+    const shortTermPayable = payable
+
+    // Estimated available funds
+    const estimatedFunds = totalFunds + shortTermReceivable - shortTermPayable
+
+    // Total assets & liabilities
     const totalAssets = Object.values(bs.assets.current).reduce((a, b) => a + b, 0) +
                         Object.values(bs.assets.nonCurrent).reduce((a, b) => a + b, 0)
-    const totalLiabilities = Object.values(bs.liabilities.current).reduce((a, b) => a + b, 0) +
+    const totalCurrentLiabilities = Object.values(bs.liabilities.current).reduce((a, b) => a + b, 0)
+    const totalLiabilities = totalCurrentLiabilities +
                               Object.values(bs.liabilities.nonCurrent).reduce((a, b) => a + b, 0)
-    const totalEquity = Object.values(bs.equity).reduce((a, b) => a + b, 0)
+
+    // Current assets for ratios
+    const currentAssets = Object.values(bs.assets.current).reduce((a, b) => a + b, 0)
+    const quickAssets = currentAssets - (bs.assets.current.inventory || 0)
+
+    // Ratios
+    const currentRatio = totalCurrentLiabilities !== 0 ? currentAssets / totalCurrentLiabilities : 0
+    const quickRatio = totalCurrentLiabilities !== 0 ? quickAssets / totalCurrentLiabilities : 0
+    const cashRatio = totalCurrentLiabilities !== 0 ? totalFunds / totalCurrentLiabilities : 0
+
+    // Expense breakdown
+    const expenseBreakdown = [
+      { name: '管理费用', value: income.adminExp },
+      { name: '销售费用', value: income.sellingExp },
+      { name: '财务费用', value: income.financeExp },
+      { name: '研发费用', value: income.rdExp || 0 },
+    ].filter(e => e.value > 0)
+
+    const totalExpenses = income.adminExp + income.sellingExp + income.financeExp + (income.rdExp || 0)
+
+    // Top receivable/payable (from voucher lines with remark as counterparty)
+    const topReceivables = db.prepare(`
+      SELECT vl.remark as name, SUM(CASE WHEN vl.direction='debit' THEN vl.amount ELSE -vl.amount END) as amount
+      FROM voucher_lines vl
+      JOIN vouchers v ON vl.voucher_id = v.id
+      WHERE vl.account_code LIKE '1122%' AND v.status = 'posted'
+      GROUP BY vl.remark
+      HAVING amount > 0
+      ORDER BY amount DESC
+      LIMIT 5
+    `).all() as { name: string | null; amount: number }[]
+
+    const topPayables = db.prepare(`
+      SELECT vl.remark as name, SUM(CASE WHEN vl.direction='credit' THEN vl.amount ELSE -vl.amount END) as amount
+      FROM voucher_lines vl
+      JOIN vouchers v ON vl.voucher_id = v.id
+      WHERE vl.account_code LIKE '2202%' AND v.status = 'posted'
+      GROUP BY vl.remark
+      HAVING amount > 0
+      ORDER BY amount DESC
+      LIMIT 5
+    `).all() as { name: string | null; amount: number }[]
+
+    // Trend data (last 6 periods)
+    const trendData: { period: string; revenue: number; cost: number; netProfit: number; netMargin: number }[] = []
+    if (period) {
+      const periods = this.periodRepo.findAll()
+        .filter(p => p.year * 100 + p.month <= period.year * 100 + period.month)
+        .sort((a, b) => (a.year * 100 + a.month) - (b.year * 100 + b.month))
+        .slice(-6)
+
+      for (const p of periods) {
+        const pIncome = this.incomeStatement(p.id)
+        trendData.push({
+          period: `${p.month}月`,
+          revenue: pIncome.revenue,
+          cost: pIncome.costOfGoods,
+          netProfit: pIncome.netProfit,
+          netMargin: pIncome.netMargin,
+        })
+      }
+    }
+
+    // Period-over-period changes
+    const calcChange = (current: number, prev: number | null) => {
+      if (prev === null || prev === 0) return null
+      return (current - prev) / Math.abs(prev)
+    }
+
+    // Cash flow for the period
+    const cashIn = this.getCashFlow(periodId, 'debit')
+    const cashOut = this.getCashFlow(periodId, 'credit')
 
     return {
       funds: {
-        cash: cashBalance.bal / 100,
-        bank: bankBalance.bal / 100,
-        total: (cashBalance.bal + bankBalance.bal) / 100,
-        receivable: bs.assets.current.receivable,
-        payable: bs.liabilities.current.payable,
+        cash: cashBalance,
+        bank: bankBalance,
+        total: totalFunds,
+        receivable,
+        payable,
+      },
+      fundDetails: {
+        bankDeposit: bankBalance,
+        cashOnHand: cashBalance,
+        netCashFlow: cashIn - cashOut,
+        cashIncome: cashIn,
+        cashExpense: cashOut,
+      },
+      receivablePayable: {
+        totalReceivable: receivable,
+        totalPayable: payable,
+        topReceivables: topReceivables.map(r => ({
+          name: r.name || '未分类',
+          amount: r.amount / 100,
+        })),
+        topPayables: topPayables.map(r => ({
+          name: r.name || '未分类',
+          amount: r.amount / 100,
+        })),
+      },
+      estimatedFunds: {
+        total: estimatedFunds,
+        currentFunds: totalFunds,
+        shortTermReceivable,
+        shortTermPayable,
+        cashRatio,
+        quickRatio,
+        prevCashRatio: null as number | null,
+        prevQuickRatio: null as number | null,
       },
       profitability: {
         netProfit: income.netProfit,
         grossMargin: income.grossMargin,
         netMargin: income.netMargin,
         operatingMargin: income.operatingMargin,
+        revenue: income.revenue,
+        costOfGoods: income.costOfGoods,
+        grossProfit: income.grossProfit,
+        // Period comparisons
+        prevNetProfit: prevIncome?.netProfit ?? null,
+        prevRevenue: prevIncome?.revenue ?? null,
+        prevCost: prevIncome?.costOfGoods ?? null,
+        prevNetMargin: prevIncome?.netMargin ?? null,
+        sameYearNetProfit: sameLastYearIncome?.netProfit ?? null,
+        sameYearRevenue: sameLastYearIncome?.revenue ?? null,
+        sameYearCost: sameLastYearIncome?.costOfGoods ?? null,
+        sameYearNetMargin: sameLastYearIncome?.netMargin ?? null,
+        // Change rates
+        netProfitChangeVsPrev: calcChange(income.netProfit, prevIncome?.netProfit ?? null),
+        netProfitChangeVsSameYear: calcChange(income.netProfit, sameLastYearIncome?.netProfit ?? null),
+        revenueChangeVsPrev: calcChange(income.revenue, prevIncome?.revenue ?? null),
+        revenueChangeVsSameYear: calcChange(income.revenue, sameLastYearIncome?.revenue ?? null),
+        costChangeVsPrev: calcChange(income.costOfGoods, prevIncome?.costOfGoods ?? null),
+        costChangeVsSameYear: calcChange(income.costOfGoods, sameLastYearIncome?.costOfGoods ?? null),
+        netMarginChangeVsPrev: prevIncome ? income.netMargin - prevIncome.netMargin : null,
+        netMarginChangeVsSameYear: sameLastYearIncome ? income.netMargin - sameLastYearIncome.netMargin : null,
+      },
+      expenses: {
+        total: totalExpenses,
+        breakdown: expenseBreakdown,
+        prevTotal: prevIncome ? (prevIncome.adminExp + prevIncome.sellingExp + prevIncome.financeExp + (prevIncome.rdExp || 0)) : null,
+        sameYearTotal: sameLastYearIncome ? (sameLastYearIncome.adminExp + sameLastYearIncome.sellingExp + sameLastYearIncome.financeExp + (sameLastYearIncome.rdExp || 0)) : null,
+        expenseChangeVsPrev: calcChange(
+          totalExpenses,
+          prevIncome ? (prevIncome.adminExp + prevIncome.sellingExp + prevIncome.financeExp + (prevIncome.rdExp || 0)) : null
+        ),
+        expenseChangeVsSameYear: calcChange(
+          totalExpenses,
+          sameLastYearIncome ? (sameLastYearIncome.adminExp + sameLastYearIncome.sellingExp + sameLastYearIncome.financeExp + (sameLastYearIncome.rdExp || 0)) : null
+        ),
       },
       solvency: {
         totalAssets,
         totalLiabilities,
-        totalEquity,
+        totalEquity: totalAssets - totalLiabilities,
         debtRatio: totalAssets !== 0 ? totalLiabilities / totalAssets : 0,
-        currentRatio: bs.liabilities.current.payable !== 0
-          ? (bs.assets.current.cash + bs.assets.current.receivable + bs.assets.current.inventory) / bs.liabilities.current.payable
-          : 0,
+        currentRatio,
+        quickRatio,
+        cashRatio,
       },
+      trend: trendData,
     }
+  }
+
+  private getCashFlow(periodId: string, direction: string): number {
+    const db = getDb()
+    const result = db.prepare(`
+      SELECT COALESCE(SUM(vl.amount), 0) as total
+      FROM voucher_lines vl
+      JOIN vouchers v ON vl.voucher_id = v.id
+      WHERE (vl.account_code LIKE '1001%' OR vl.account_code LIKE '1002%')
+        AND vl.direction = ? AND v.period_id = ? AND v.status = 'posted'
+    `).get(direction, periodId) as { total: number }
+    return result.total / 100
   }
 }

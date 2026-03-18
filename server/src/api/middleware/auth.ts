@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
+import { companyContext } from '../../infrastructure/database/db'
 
 export interface JwtPayload {
   userId: string
@@ -11,6 +12,7 @@ declare global {
   namespace Express {
     interface Request {
       user?: JwtPayload
+      companyId?: string
     }
   }
 }
@@ -39,4 +41,18 @@ export function requireRole(...roles: string[]) {
     }
     next()
   }
+}
+
+/**
+ * Middleware to extract company context from x-company-id header
+ * and set it for the request lifecycle using AsyncLocalStorage.
+ */
+export function companyScope(req: Request, res: Response, next: NextFunction): void {
+  const companyId = req.headers['x-company-id'] as string
+  if (!companyId) {
+    res.status(400).json({ code: 400, message: '缺少账套ID (x-company-id header)' })
+    return
+  }
+  req.companyId = companyId
+  companyContext.run(companyId, () => next())
 }

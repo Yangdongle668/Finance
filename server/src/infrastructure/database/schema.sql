@@ -6,21 +6,7 @@
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
--- ── 用户与权限 ──────────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS users (
-  id          TEXT PRIMARY KEY,
-  username    TEXT NOT NULL UNIQUE,
-  password    TEXT NOT NULL,          -- bcrypt hash
-  name        TEXT NOT NULL,
-  email       TEXT,
-  role        TEXT NOT NULL DEFAULT 'accountant',
-  -- admin | supervisor | accountant | cashier | viewer
-  is_enabled  INTEGER NOT NULL DEFAULT 1,
-  last_login  TEXT,
-  created_at  TEXT NOT NULL,
-  updated_at  TEXT NOT NULL
-);
+-- ── 审计日志 ──────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id          TEXT PRIMARY KEY,

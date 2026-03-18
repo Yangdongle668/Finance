@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { getDb } from '../../infrastructure/database/db'
+import { getMasterDb } from '../../infrastructure/database/db'
 import { ok } from '../middleware/errorHandler'
 import { authenticate } from '../middleware/auth'
 import dayjs from 'dayjs'
@@ -16,7 +16,7 @@ router.post('/login', async (req: Request, res: Response) => {
     return
   }
 
-  const db = getDb()
+  const db = getMasterDb()
   const user = db.prepare('SELECT * FROM users WHERE username=? AND is_enabled=1').get(username) as {
     id: string; username: string; password: string; name: string; role: string
   } | undefined
@@ -38,14 +38,14 @@ router.post('/login', async (req: Request, res: Response) => {
 })
 
 router.get('/me', authenticate, (req: Request, res: Response) => {
-  const db = getDb()
+  const db = getMasterDb()
   const user = db.prepare('SELECT id,username,name,role,email,last_login FROM users WHERE id=?').get(req.user!.userId) as object
   ok(res, user)
 })
 
 router.post('/change-password', authenticate, async (req: Request, res: Response) => {
   const { oldPassword, newPassword } = req.body
-  const db = getDb()
+  const db = getMasterDb()
   const user = db.prepare('SELECT * FROM users WHERE id=?').get(req.user!.userId) as { password: string } | undefined
   if (!user || !(await bcrypt.compare(oldPassword, user.password))) {
     res.status(400).json({ code: 400, message: '原密码错误' })
@@ -59,7 +59,7 @@ router.post('/change-password', authenticate, async (req: Request, res: Response
 // ── 用户管理（管理员） ────────────────────────────────────
 
 router.get('/users', authenticate, (req: Request, res: Response) => {
-  const db = getDb()
+  const db = getMasterDb()
   const users = db.prepare('SELECT id,username,name,role,email,is_enabled,last_login,created_at FROM users ORDER BY created_at').all()
   ok(res, users)
 })
@@ -67,7 +67,7 @@ router.get('/users', authenticate, (req: Request, res: Response) => {
 router.post('/users', authenticate, async (req: Request, res: Response) => {
   const { username, password, name, role, email } = req.body
   if (req.user!.role !== 'admin') { res.status(403).json({ code: 403, message: '权限不足' }); return }
-  const db = getDb()
+  const db = getMasterDb()
   const exists = db.prepare('SELECT id FROM users WHERE username=?').get(username)
   if (exists) { res.status(400).json({ code: 400, message: '用户名已存在' }); return }
   const hashed = await bcrypt.hash(password || '123456', 10)

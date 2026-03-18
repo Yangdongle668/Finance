@@ -85,6 +85,11 @@ export class AccountRepository {
     void allowed
   }
 
+  delete(code: string): void {
+    const db = getDb()
+    db.prepare('DELETE FROM accounts WHERE code=?').run(code)
+  }
+
   // ── 科目余额 ──────────────────────────────────────────────
 
   getBalances(periodId: string): AccountBalance[] {

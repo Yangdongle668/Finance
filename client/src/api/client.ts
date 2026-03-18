@@ -3,13 +3,26 @@ import { message } from 'antd'
 
 const client = axios.create({
   baseURL: '/api',
-  timeout: 30000,
+  timeout: 60000,
 })
 
-// 请求拦截 - 附加 JWT
+// 请求拦截 - 附加 JWT + Company ID
 client.interceptors.request.use(config => {
   const token = localStorage.getItem('token')
   if (token) config.headers.Authorization = `Bearer ${token}`
+
+  // Attach company ID from localStorage
+  try {
+    const companyStorage = localStorage.getItem('company-storage')
+    if (companyStorage) {
+      const parsed = JSON.parse(companyStorage)
+      const companyId = parsed?.state?.currentCompany?.id
+      if (companyId) {
+        config.headers['x-company-id'] = companyId
+      }
+    }
+  } catch { /* ignore parse errors */ }
+
   return config
 })
 
@@ -33,6 +46,12 @@ export default client
 // ── API helpers ───────────────────────────────────────────
 
 export const api = {
+  // Companies
+  listCompanies: () => client.get<ApiResponse<Company[]>>('/companies'),
+  createCompany: (data: { name: string }) => client.post<ApiResponse<{ id: string; name: string }>>('/companies', data),
+  updateCompany: (id: string, data: { name: string }) => client.patch(`/companies/${id}`, data),
+  deleteCompany: (id: string) => client.delete(`/companies/${id}`),
+
   // Auth
   login: (data: { username: string; password: string }) =>
     client.post<ApiResponse<{ token: string; user: User }>>('/auth/login', data),
@@ -56,6 +75,7 @@ export const api = {
   leafAccounts: () => client.get<ApiResponse<Account[]>>('/accounts/leaf'),
   createAccount: (data: Partial<Account>) => client.post('/accounts', data),
   updateAccount: (code: string, data: Partial<Account>) => client.patch(`/accounts/${code}`, data),
+  deleteAccount: (code: string) => client.delete(`/accounts/${code}`),
   listDimensions: (type?: string) =>
     client.get<ApiResponse<Dimension[]>>(`/accounts/dimensions/list${type ? `?type=${type}` : ''}`),
 
@@ -84,7 +104,7 @@ export const api = {
   incomeStatement: (periodId: string) =>
     client.get<ApiResponse<IncomeStatement>>(`/reports/income-statement/${periodId}`),
   dashboard: (periodId: string) =>
-    client.get<ApiResponse<Dashboard>>(`/reports/dashboard/${periodId}`),
+    client.get<ApiResponse<DashboardData>>(`/reports/dashboard/${periodId}`),
 
   // Assets
   listAssets: (params?: { status?: string; category?: string }) =>
@@ -96,6 +116,19 @@ export const api = {
     client.get<PaginatedResponse<Invoice>>('/invoices', { params }),
   createInvoice: (data: Partial<Invoice>) => client.post('/invoices', data),
   certifyInvoice: (id: string) => client.patch(`/invoices/${id}/certify`),
+  parseInvoicePdf: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return client.post<ApiResponse<ParsedInvoice>>('/invoices/parse-pdf', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+  parseInvoiceImage: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return client.post<ApiResponse<ParsedInvoice>>('/invoices/parse-image', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    })
+  },
   invoiceStats: (params?: { startDate?: string; endDate?: string }) =>
     client.get<ApiResponse<InvoiceStats[]>>('/invoices/stats', { params }),
 }
@@ -107,6 +140,7 @@ export interface PaginatedResponse<T> {
   code: number; message: string; data: T[]; total: number; page: number; pageSize: number; totalPages: number
 }
 
+export interface Company { id: string; name: string; created_at: string; updated_at: string }
 export interface User { id: string; username: string; name: string; role: string; email?: string; isEnabled?: boolean; lastLogin?: string }
 export interface Period { id: string; year: number; month: number; name: string; startDate: string; endDate: string; status: 'open' | 'closing' | 'closed' }
 export interface Account { code: string; name: string; level: number; nature: string; direction: string; parentCode?: string; isLeaf: boolean; isEnabled: boolean }
@@ -130,9 +164,43 @@ export interface LedgerResult { accountCode: string; accountName: string; openin
 export interface GeneralLedgerRow { accountCode: string; accountName: string; nature: string; openingBalance: number; debitAmount: number; creditAmount: number; closingBalance: number; prevClosingBalance: number }
 export interface BalanceSheet { assets: Record<string, Record<string, number>>; liabilities: Record<string, Record<string, number>>; equity: Record<string, number> }
 export interface IncomeStatement { revenue: number; costOfGoods: number; grossProfit: number; grossMargin: number; sellingExp: number; adminExp: number; financeExp: number; operatingProfit: number; operatingMargin: number; netProfit: number; netMargin: number }
-export interface Dashboard { funds: { cash: number; bank: number; total: number; receivable: number; payable: number }; profitability: { netProfit: number; grossMargin: number; netMargin: number }; solvency: { totalAssets: number; totalLiabilities: number; debtRatio: number } }
+
+export interface DashboardData {
+  funds: { cash: number; bank: number; total: number; receivable: number; payable: number }
+  fundDetails: { bankDeposit: number; cashOnHand: number; netCashFlow: number; cashIncome: number; cashExpense: number }
+  receivablePayable: {
+    totalReceivable: number; totalPayable: number
+    topReceivables: { name: string; amount: number }[]
+    topPayables: { name: string; amount: number }[]
+  }
+  estimatedFunds: {
+    total: number; currentFunds: number; shortTermReceivable: number; shortTermPayable: number
+    cashRatio: number; quickRatio: number; prevCashRatio: number | null; prevQuickRatio: number | null
+  }
+  profitability: {
+    netProfit: number; grossMargin: number; netMargin: number; operatingMargin: number
+    revenue: number; costOfGoods: number; grossProfit: number
+    prevNetProfit: number | null; prevRevenue: number | null; prevCost: number | null; prevNetMargin: number | null
+    sameYearNetProfit: number | null; sameYearRevenue: number | null; sameYearCost: number | null; sameYearNetMargin: number | null
+    netProfitChangeVsPrev: number | null; netProfitChangeVsSameYear: number | null
+    revenueChangeVsPrev: number | null; revenueChangeVsSameYear: number | null
+    costChangeVsPrev: number | null; costChangeVsSameYear: number | null
+    netMarginChangeVsPrev: number | null; netMarginChangeVsSameYear: number | null
+  }
+  expenses: {
+    total: number; breakdown: { name: string; value: number }[]
+    prevTotal: number | null; sameYearTotal: number | null
+    expenseChangeVsPrev: number | null; expenseChangeVsSameYear: number | null
+  }
+  solvency: {
+    totalAssets: number; totalLiabilities: number; totalEquity: number
+    debtRatio: number; currentRatio: number; quickRatio: number; cashRatio: number
+  }
+  trend: { period: string; revenue: number; cost: number; netProfit: number; netMargin: number }[]
+}
 
 export interface Asset { id: string; assetNo: string; name: string; category: string; originalValue: number; usefulLife: number; acquiredDate: string; status: string }
-export interface Invoice { id: string; direction: string; invoiceType: string; invoiceNo: string; invoiceDate: string; sellerName: string; totalAmount: number; taxAmount: number; status: string }
+export interface Invoice { id: string; direction: string; invoiceType: string; invoiceNo: string; invoiceDate: string; sellerName: string; totalAmount: number; taxAmount: number; status: string; amountExTax: number }
 export interface InvoiceFilter { direction?: string; status?: string; startDate?: string; endDate?: string; page?: number; pageSize?: number }
 export interface InvoiceStats { direction: string; count: number; total_ex_tax: number; total_tax: number; total_amount: number }
+export interface ParsedInvoice { invoiceNo?: string; invoiceCode?: string; invoiceDate?: string; sellerName?: string; sellerTaxNo?: string; buyerName?: string; buyerTaxNo?: string; amountExTax?: number; taxRate?: number; taxAmount?: number; totalAmount?: number; invoiceType?: string; rawText?: string; ocrFailed?: boolean }
