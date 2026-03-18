@@ -257,14 +257,14 @@ export class ReportService {
 
     // Count vouchers
     const countRow = db.prepare(`
-      SELECT COUNT(*) as cnt FROM vouchers
-      WHERE period_id = ? ${statusCond} ${dateFilter}
+      SELECT COUNT(*) as cnt FROM vouchers v
+      WHERE v.period_id = ? ${statusCond} ${dateFilter}
     `).get(...params) as { cnt: number }
 
     // Count attachments
     const attachRow = db.prepare(`
-      SELECT COALESCE(SUM(attachment_count), 0) as cnt FROM vouchers
-      WHERE period_id = ? ${statusCond} ${dateFilter}
+      SELECT COALESCE(SUM(v.attachment_count), 0) as cnt FROM vouchers v
+      WHERE v.period_id = ? ${statusCond} ${dateFilter}
     `).get(...params) as { cnt: number }
 
     return {

@@ -17,6 +17,7 @@ import AccountsPage from '@/pages/settings/AccountsPage'
 import PeriodPage from '@/pages/settings/PeriodPage'
 import AssetPage from '@/pages/asset/AssetPage'
 import InvoicePage from '@/pages/invoice/InvoicePage'
+import ClosingPage from '@/pages/closing/ClosingPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const isLoggedIn = useAuthStore(s => s.isLoggedIn())
@@ -46,6 +47,8 @@ export default function App() {
           {/* 报表 */}
           <Route path="reports/balance-sheet" element={<BalanceSheetPage />} />
           <Route path="reports/income-statement" element={<IncomeStatementPage />} />
+          {/* 结账 */}
+          <Route path="closing" element={<ClosingPage />} />
           {/* 资产 */}
           <Route path="assets" element={<AssetPage />} />
           {/* 发票 */}

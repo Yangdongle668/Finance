@@ -108,6 +108,23 @@ export const api = {
   voucherSummary: (periodId: string, startDate?: string, endDate?: string, statusFilter?: string) =>
     client.get<ApiResponse<VoucherSummaryResult>>(`/reports/voucher-summary/${periodId}`, { params: { startDate, endDate, statusFilter } }),
 
+  // Closing
+  listClosingTemplates: () => client.get<ApiResponse<ClosingTemplate[]>>('/closing/templates'),
+  createClosingTemplate: (data: Partial<ClosingTemplate> & { lines?: Partial<ClosingTemplateLine>[] }) =>
+    client.post<ApiResponse<ClosingTemplate>>('/closing/templates', data),
+  updateClosingTemplate: (id: string, data: Partial<ClosingTemplate> & { lines?: Partial<ClosingTemplateLine>[] }) =>
+    client.put<ApiResponse<ClosingTemplate>>(`/closing/templates/${id}`, data),
+  deleteClosingTemplate: (id: string) =>
+    client.delete<ApiResponse<null>>(`/closing/templates/${id}`),
+  closingSummary: (periodId: string) =>
+    client.get<ApiResponse<ClosingSummaryItem[]>>(`/closing/summary/${periodId}`),
+  generateClosingVoucher: (templateId: string, periodId: string) =>
+    client.post<ApiResponse<{ voucherId: string }>>(`/closing/generate/${templateId}`, { periodId }),
+  closingClose: (periodId: string) =>
+    client.post<ApiResponse<null>>(`/closing/${periodId}/close`),
+  closingReopen: (periodId: string) =>
+    client.post<ApiResponse<null>>(`/closing/${periodId}/reopen`),
+
   // Assets
   listAssets: (params?: { status?: string; category?: string }) =>
     client.get<ApiResponse<Asset[]>>('/assets', { params }),
@@ -186,6 +203,24 @@ export interface Dashboard { funds: { cash: number; bank: number; total: number;
 
 export interface VoucherSummaryRow { accountCode: string; accountName: string; debitAmount: number; creditAmount: number }
 export interface VoucherSummaryResult { rows: VoucherSummaryRow[]; totalVouchers: number; totalAttachments: number }
+
+export interface ClosingTemplateLine {
+  id: string; templateId: string; lineNo: number; summary: string
+  accountCode: string; accountName: string
+  direction: 'debit' | 'credit'; amountType: 'balance_out' | 'balance_in' | 'fixed'; ratio: number
+}
+export interface ClosingTemplate {
+  id: string; name: string; type: 'system' | 'custom'; systemKey: string | null
+  isEnabled: boolean; isSystem: boolean; sortOrder: number
+  voucherWord: string; summary: string | null
+  config: Record<string, unknown> | null; lines: ClosingTemplateLine[]
+  createdAt: string; updatedAt: string
+}
+export interface ClosingSummaryItem {
+  templateId: string; name: string; type: 'system' | 'custom'; systemKey: string | null
+  isEnabled: boolean; isSystem: boolean; sortOrder: number
+  transferred: number; pending: number; voucherId: string | null; voucherStatus: string | null
+}
 
 export interface Asset { id: string; assetNo: string; name: string; category: string; originalValue: number; usefulLife: number; acquiredDate: string; status: string }
 export interface Invoice { id: string; direction: string; invoiceType: string; invoiceNo: string; invoiceDate: string; sellerName: string; totalAmount: number; taxAmount: number; status: string }
