@@ -14,7 +14,7 @@ const STATUS: Record<string, { label: string; color: string }> = {
 
 export default function PeriodPage() {
   const { periods, setPeriods } = usePeriodStore()
-  const user = useAuthStore(s => s.user)
+  const getCurrentRole = useAuthStore(s => s.getCurrentRole)
   const [ensureYear, setEnsureYear] = useState(new Date().getFullYear())
   const [loading, setLoading] = useState(false)
 
@@ -58,7 +58,7 @@ export default function PeriodPage() {
               <Button size="small" type="primary">结账</Button>
             </Popconfirm>
           )}
-          {r.status === 'closed' && user?.role === 'admin' && (
+          {r.status === 'closed' && getCurrentRole() === 'admin' && (
             <Popconfirm title="确认反结账？需要管理员权限。" onConfirm={() => handleReopen(r.id)}>
               <Button size="small" danger>反结账</Button>
             </Popconfirm>

@@ -16,10 +16,19 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const res = await api.login(values)
-      const { token, user } = res.data.data
-      setAuth(token, user)
+      const { token, user, companies } = res.data.data
+      setAuth(token, user, companies)
       message.success(`欢迎回来，${user.name}`)
-      navigate('/')
+      // If user has companies, go to company selection; otherwise go to dashboard
+      if (companies && companies.length > 1) {
+        navigate('/select-company')
+      } else if (companies && companies.length === 1) {
+        // Auto-select the only company
+        localStorage.setItem('companyId', companies[0].id)
+        navigate('/')
+      } else {
+        navigate('/select-company')
+      }
     } finally {
       setLoading(false)
     }
@@ -31,7 +40,7 @@ export default function LoginPage() {
         <Space direction="vertical" size={24} style={{ width: '100%' }}>
           <div style={{ textAlign: 'center' }}>
             <BankOutlined style={{ fontSize: 48, color: '#1677ff', marginBottom: 12 }} />
-            <Title level={3} style={{ margin: 0 }}>精斗云云会计</Title>
+            <Title level={3} style={{ margin: 0 }}>乐算云系统</Title>
             <Text type="secondary">专为个人/小微企业设计的云端财务管理系统</Text>
           </div>
 
@@ -50,7 +59,7 @@ export default function LoginPage() {
           </Form>
 
           <Text type="secondary" style={{ display: 'block', textAlign: 'center', fontSize: 12 }}>
-            默认账号：admin / Admin@123
+            乐算云 - 智能财务管理
           </Text>
         </Space>
       </Card>

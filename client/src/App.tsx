@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import MainLayout from '@/components/layout/MainLayout'
 import LoginPage from '@/pages/LoginPage'
+import SelectCompanyPage from '@/pages/SelectCompanyPage'
 import DashboardPage from '@/pages/dashboard/DashboardPage'
 import VoucherListPage from '@/pages/voucher/VoucherListPage'
 import VoucherFormPage from '@/pages/voucher/VoucherFormPage'
@@ -18,10 +19,21 @@ import PeriodPage from '@/pages/settings/PeriodPage'
 import AssetPage from '@/pages/asset/AssetPage'
 import InvoicePage from '@/pages/invoice/InvoicePage'
 import ClosingPage from '@/pages/closing/ClosingPage'
+import ProfilePage from '@/pages/settings/ProfilePage'
+import UserManagePage from '@/pages/settings/UserManagePage'
+import CompanySettingsPage from '@/pages/settings/CompanySettingsPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const isLoggedIn = useAuthStore(s => s.isLoggedIn())
   if (!isLoggedIn) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
+function RequireCompany({ children }: { children: React.ReactNode }) {
+  const isLoggedIn = useAuthStore(s => s.isLoggedIn())
+  const companyId = useAuthStore(s => s.currentCompanyId) || localStorage.getItem('companyId')
+  if (!isLoggedIn) return <Navigate to="/login" replace />
+  if (!companyId) return <Navigate to="/select-company" replace />
   return <>{children}</>
 }
 
@@ -30,7 +42,8 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/" element={<RequireAuth><MainLayout /></RequireAuth>}>
+        <Route path="/select-company" element={<RequireAuth><SelectCompanyPage /></RequireAuth>} />
+        <Route path="/" element={<RequireCompany><MainLayout /></RequireCompany>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
           {/* 凭证 */}
@@ -56,6 +69,9 @@ export default function App() {
           {/* 设置 */}
           <Route path="settings/accounts" element={<AccountsPage />} />
           <Route path="settings/periods" element={<PeriodPage />} />
+          <Route path="settings/profile" element={<ProfilePage />} />
+          <Route path="settings/users" element={<UserManagePage />} />
+          <Route path="settings/company" element={<CompanySettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

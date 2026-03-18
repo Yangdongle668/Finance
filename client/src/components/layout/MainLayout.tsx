@@ -5,7 +5,7 @@ import {
   DashboardOutlined, FileTextOutlined, BookOutlined, BarChartOutlined,
   BankOutlined, AuditOutlined, SettingOutlined,
   UserOutlined, LogoutOutlined, LockOutlined, AppstoreOutlined,
-  ReconciliationOutlined,
+  ReconciliationOutlined, SwapOutlined, EditOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { usePeriodStore } from '@/stores/periodStore'
@@ -48,6 +48,8 @@ const menuItems = [
     children: [
       { key: '/settings/accounts', label: '科目设置' },
       { key: '/settings/periods', label: '期间管理' },
+      { key: '/settings/company', label: '账套信息' },
+      { key: '/settings/users', label: '用户管理' },
     ]
   },
 ]
@@ -55,11 +57,14 @@ const menuItems = [
 export default function MainLayout() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { user, logout } = useAuthStore()
+  const { user, companies, currentCompanyId, getCurrentCompany, logout } = useAuthStore()
   const { periods, currentPeriod, setPeriods, setCurrentPeriod } = usePeriodStore()
   const [collapsed, setCollapsed] = useState(false)
 
+  const currentCompany = getCurrentCompany()
+
   useEffect(() => {
+    if (!currentCompanyId) return
     api.listPeriods().then(r => {
       const ps = r.data.data
       setPeriods(ps)
@@ -68,7 +73,7 @@ export default function MainLayout() {
         setCurrentPeriod(open[0] ?? ps[0])
       }
     })
-  }, [])
+  }, [currentCompanyId])
 
   const selectedKeys = [location.pathname]
   const openKeys = menuItems
@@ -76,11 +81,18 @@ export default function MainLayout() {
     .map(m => m.key)
 
   const userMenu = [
-    { key: 'profile', icon: <UserOutlined />, label: '个人信息' },
+    { key: 'profile', icon: <EditOutlined />, label: '个人信息' },
     { key: 'pwd', icon: <LockOutlined />, label: '修改密码' },
+    ...(companies.length > 1 ? [{ key: 'switch', icon: <SwapOutlined />, label: '切换账套' }] : []),
     { type: 'divider' as const },
     { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', danger: true },
   ]
+
+  const handleUserMenu = ({ key }: { key: string }) => {
+    if (key === 'logout') { logout(); navigate('/login') }
+    else if (key === 'switch') { navigate('/select-company') }
+    else if (key === 'profile') { navigate('/settings/profile') }
+  }
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -94,7 +106,7 @@ export default function MainLayout() {
       >
         <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #f0f0f0', padding: '0 16px' }}>
           <BankOutlined style={{ fontSize: 24, color: '#1677ff', marginRight: collapsed ? 0 : 8 }} />
-          {!collapsed && <Text strong style={{ fontSize: 16, color: '#1677ff' }}>精斗云会计</Text>}
+          {!collapsed && <Text strong style={{ fontSize: 16, color: '#1677ff' }}>乐算云</Text>}
         </div>
 
         <Menu
@@ -109,8 +121,13 @@ export default function MainLayout() {
 
       <Layout>
         <Header style={{ background: '#fff', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f0f0f0', height: 56, position: 'sticky', top: 0, zIndex: 100 }}>
-          {/* 期间选择器 */}
-          <Space>
+          <Space size={16}>
+            {currentCompany && (
+              <Tag color="blue" style={{ fontSize: 13, padding: '2px 8px' }}>
+                <BankOutlined style={{ marginRight: 4 }} />
+                {currentCompany.name}
+              </Tag>
+            )}
             <Text type="secondary" style={{ fontSize: 13 }}>当前期间</Text>
             <Select
               value={currentPeriod?.id}
@@ -131,7 +148,7 @@ export default function MainLayout() {
           </Space>
 
           {/* 用户菜单 */}
-          <Dropdown menu={{ items: userMenu, onClick: ({ key }) => { if (key === 'logout') { logout(); navigate('/login') } } }}>
+          <Dropdown menu={{ items: userMenu, onClick: handleUserMenu }}>
             <Space style={{ cursor: 'pointer' }}>
               <Avatar size="small" icon={<UserOutlined />} style={{ background: '#1677ff' }} />
               <Text style={{ fontSize: 14 }}>{user?.name}</Text>

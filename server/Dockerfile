@@ -32,9 +32,11 @@ COPY --from=builder /app/dist ./dist
 
 # 复制 schema（migrate 运行时读取，需与编译产物同级）
 COPY src/infrastructure/database/schema.sql ./dist/infrastructure/database/schema.sql
+COPY src/infrastructure/database/master-schema.sql ./dist/infrastructure/database/master-schema.sql
 # 同时保留 src 路径（path.join(__dirname) 在 dist 下会向上查找）
 RUN mkdir -p /app/src/infrastructure/database && \
-    cp /app/dist/infrastructure/database/schema.sql /app/src/infrastructure/database/schema.sql
+    cp /app/dist/infrastructure/database/schema.sql /app/src/infrastructure/database/schema.sql && \
+    cp /app/dist/infrastructure/database/master-schema.sql /app/src/infrastructure/database/master-schema.sql
 
 # 创建数据目录
 RUN mkdir -p /app/data && mkdir -p /app/logs
