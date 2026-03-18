@@ -63,14 +63,34 @@ export const api = {
   listVouchers: (params: VoucherFilter) =>
     client.get<PaginatedResponse<Voucher>>('/vouchers', { params }),
   getVoucher: (id: string) => client.get<ApiResponse<Voucher>>(`/vouchers/${id}`),
+  getNextVoucherNo: (periodId: string, voucherWord = '记') =>
+    client.get<ApiResponse<{ voucherNo: string }>>('/vouchers/next-no', { params: { periodId, voucherWord } }),
   createVoucher: (data: CreateVoucherPayload) =>
     client.post<ApiResponse<Voucher>>('/vouchers', data),
+  updateVoucher: (id: string, data: UpdateVoucherPayload) =>
+    client.put<ApiResponse<Voucher>>(`/vouchers/${id}`, data),
+  deleteVoucher: (id: string) =>
+    client.delete<ApiResponse<null>>(`/vouchers/${id}`),
   submitVoucher: (id: string) => client.post(`/vouchers/${id}/submit`),
   approveVoucher: (id: string) => client.post(`/vouchers/${id}/approve`),
   rejectVoucher: (id: string) => client.post(`/vouchers/${id}/reject`),
   postVoucher: (id: string) => client.post(`/vouchers/${id}/post`),
   batchPostVouchers: (ids: string[]) => client.post('/vouchers/batch-post', { ids }),
   reverseVoucher: (id: string) => client.post(`/vouchers/${id}/reverse`),
+
+  // Attachments
+  listAttachments: (params?: AttachmentFilter) =>
+    client.get<PaginatedResponse<AttachmentItem>>('/attachments', { params }),
+  createAttachment: (data: Partial<AttachmentItem>) =>
+    client.post<ApiResponse<AttachmentItem>>('/attachments', data),
+  deleteAttachment: (id: string) =>
+    client.delete<ApiResponse<null>>(`/attachments/${id}`),
+  linkAttachment: (id: string, voucherId: string | null) =>
+    client.patch(`/attachments/${id}/link`, { voucherId }),
+  listAttachmentCategories: () =>
+    client.get<ApiResponse<AttachmentCategory[]>>('/attachments/categories'),
+  createAttachmentCategory: (data: { name: string; parentId?: string; sortOrder?: number }) =>
+    client.post<ApiResponse<AttachmentCategory>>('/attachments/categories', data),
 
   // Reports
   trialBalance: (periodId: string) =>
@@ -112,18 +132,48 @@ export interface Period { id: string; year: number; month: number; name: string;
 export interface Account { code: string; name: string; level: number; nature: string; direction: string; parentCode?: string; isLeaf: boolean; isEnabled: boolean }
 export interface Dimension { id: string; type: string; code: string; name: string; isEnabled: boolean }
 
+export type VoucherWord = '记' | '收' | '付' | '转'
+
 export interface VoucherLine {
   id: string; accountCode: string; accountName: string; direction: 'debit' | 'credit'
   amount: number; departmentId?: string; projectId?: string; remark?: string
 }
 export interface Voucher {
-  id: string; voucherNo: string; voucherDate: string; periodId: string; summary: string
+  id: string; voucherNo: string; voucherWord: VoucherWord; voucherDate: string; periodId: string; summary: string
   type: string; status: 'draft' | 'pending' | 'approved' | 'posted' | 'reversed'
-  preparedBy: string; reviewedBy?: string; attachmentCount?: number; lines?: VoucherLine[]
+  preparedBy: string; preparedByName?: string; reviewedBy?: string; reviewedByName?: string
+  attachmentCount?: number; lines?: VoucherLine[]
   createdAt: string; updatedAt: string
 }
-export interface VoucherFilter { periodId?: string; status?: string; keyword?: string; accountCode?: string; page?: number; pageSize?: number; startDate?: string; endDate?: string }
-export interface CreateVoucherPayload { voucherDate: string; periodId: string; summary: string; lines: { accountCode: string; direction: string; amount: number; remark?: string }[] }
+export interface VoucherFilter {
+  periodId?: string; status?: string; keyword?: string; accountCode?: string
+  page?: number; pageSize?: number; startDate?: string; endDate?: string
+  voucherWord?: string; includeLines?: boolean
+}
+export interface CreateVoucherPayload {
+  voucherDate: string; periodId: string; summary: string; voucherWord?: VoucherWord
+  attachmentCount?: number
+  lines: { accountCode: string; direction: string; amount: number; summary?: string; remark?: string }[]
+}
+export interface UpdateVoucherPayload {
+  voucherDate?: string; summary?: string; voucherWord?: VoucherWord
+  attachmentCount?: number
+  lines?: { accountCode: string; direction: string; amount: number; summary?: string; remark?: string }[]
+}
+
+// Attachments
+export interface AttachmentItem {
+  id: string; name: string; remark: string | null; categoryId: string | null
+  amount: number; periodId: string | null; voucherId: string | null
+  uploadDate: string; createdAt: string; updatedAt: string
+}
+export interface AttachmentCategory {
+  id: string; name: string; parentId: string | null; sortOrder: number
+}
+export interface AttachmentFilter {
+  categoryId?: string; periodId?: string; name?: string
+  startDate?: string; endDate?: string; page?: number; pageSize?: number
+}
 
 export interface TrialBalanceRow { accountCode: string; accountName: string; level: number; nature: string; openingDebit: number; openingCredit: number; debitAmount: number; creditAmount: number; closingDebit: number; closingCredit: number }
 export interface LedgerResult { accountCode: string; accountName: string; openingBalance: number; lines: { date: string; voucherNo: string; summary: string; debit: number; credit: number; balance: number }[] }

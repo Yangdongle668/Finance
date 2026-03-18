@@ -80,7 +80,7 @@ export default function VoucherDetailPage() {
       {/* 凭证基本信息 */}
       <Card size="small" title="凭证信息">
         <Descriptions size="small" column={3}>
-          <Descriptions.Item label="凭证号">{voucher.voucherNo}</Descriptions.Item>
+          <Descriptions.Item label="凭证字号">{voucher.voucherNo}</Descriptions.Item>
           <Descriptions.Item label="凭证日期">{voucher.voucherDate}</Descriptions.Item>
           <Descriptions.Item label="类型">{voucher.type}</Descriptions.Item>
           <Descriptions.Item label="摘要" span={3}>{voucher.summary}</Descriptions.Item>

@@ -15,7 +15,14 @@ const { Text } = Typography
 
 const menuItems = [
   { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表板' },
-  { key: '/vouchers', icon: <FileTextOutlined />, label: '凭证管理' },
+  {
+    key: 'voucher', icon: <FileTextOutlined />, label: '凭证',
+    children: [
+      { key: '/vouchers/new', label: '录凭证' },
+      { key: '/vouchers', label: '查凭证' },
+      { key: '/voucher/attachment-manage', label: '原始凭证管理' },
+    ]
+  },
   {
     key: 'ledger', icon: <BookOutlined />, label: '账簿',
     children: [
