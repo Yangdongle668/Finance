@@ -105,8 +105,8 @@ export const api = {
     client.get<ApiResponse<IncomeStatement>>(`/reports/income-statement/${periodId}`),
   dashboard: (periodId: string) =>
     client.get<ApiResponse<Dashboard>>(`/reports/dashboard/${periodId}`),
-  voucherSummary: (periodId: string, startDate?: string, endDate?: string) =>
-    client.get<ApiResponse<VoucherSummaryResult>>(`/reports/voucher-summary/${periodId}`, { params: { startDate, endDate } }),
+  voucherSummary: (periodId: string, startDate?: string, endDate?: string, statusFilter?: string) =>
+    client.get<ApiResponse<VoucherSummaryResult>>(`/reports/voucher-summary/${periodId}`, { params: { startDate, endDate, statusFilter } }),
 
   // Assets
   listAssets: (params?: { status?: string; category?: string }) =>
