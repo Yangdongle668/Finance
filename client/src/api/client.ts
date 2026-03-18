@@ -6,10 +6,12 @@ const client = axios.create({
   timeout: 30000,
 })
 
-// 请求拦截 - 附加 JWT
+// 请求拦截 - 附加 JWT + Company ID
 client.interceptors.request.use(config => {
   const token = localStorage.getItem('token')
   if (token) config.headers.Authorization = `Bearer ${token}`
+  const companyId = localStorage.getItem('companyId')
+  if (companyId) config.headers['X-Company-Id'] = companyId
   return config
 })
 
@@ -35,13 +37,29 @@ export default client
 export const api = {
   // Auth
   login: (data: { username: string; password: string }) =>
-    client.post<ApiResponse<{ token: string; user: User }>>('/auth/login', data),
-  me: () => client.get<ApiResponse<User>>('/auth/me'),
+    client.post<ApiResponse<{ token: string; user: User; companies: CompanyBrief[] }>>('/auth/login', data),
+  me: () => client.get<ApiResponse<UserWithCompanies>>('/auth/me'),
+  updateProfile: (data: { name?: string; email?: string; phone?: string; avatar?: string }) =>
+    client.put<ApiResponse<User>>('/auth/profile', data),
   changePassword: (data: { oldPassword: string; newPassword: string }) =>
     client.post('/auth/change-password', data),
   listUsers: () => client.get<ApiResponse<User[]>>('/auth/users'),
   createUser: (data: Partial<User> & { password?: string }) =>
     client.post<ApiResponse<{ id: string }>>('/auth/users', data),
+  toggleUser: (id: string) => client.put(`/auth/users/${id}/toggle`),
+
+  // Companies (account sets)
+  listCompanies: () => client.get<ApiResponse<Company[]>>('/companies'),
+  getCompany: (id: string) => client.get<ApiResponse<Company>>(`/companies/${id}`),
+  createCompany: (data: Partial<Company>) => client.post<ApiResponse<{ id: string }>>('/companies', data),
+  updateCompany: (id: string, data: Partial<Company>) => client.put<ApiResponse<Company>>(`/companies/${id}`, data),
+  listCompanyUsers: (companyId: string) => client.get<ApiResponse<CompanyUser[]>>(`/companies/${companyId}/users`),
+  addCompanyUser: (companyId: string, data: { userId: string; role?: string; permissions?: string[] }) =>
+    client.post(`/companies/${companyId}/users`, data),
+  updateCompanyUser: (companyId: string, userId: string, data: { role?: string; permissions?: string[] }) =>
+    client.put(`/companies/${companyId}/users/${userId}`, data),
+  removeCompanyUser: (companyId: string, userId: string) =>
+    client.delete(`/companies/${companyId}/users/${userId}`),
 
   // Periods
   listPeriods: () => client.get<ApiResponse<Period[]>>('/periods'),
@@ -146,7 +164,11 @@ export interface PaginatedResponse<T> {
   code: number; message: string; data: T[]; total: number; page: number; pageSize: number; totalPages: number
 }
 
-export interface User { id: string; username: string; name: string; role: string; email?: string; isEnabled?: boolean; lastLogin?: string }
+export interface User { id: string; username: string; name: string; email?: string; phone?: string; avatar?: string; isEnabled?: boolean; lastLogin?: string }
+export interface UserWithCompanies extends User { companies: CompanyBrief[] }
+export interface CompanyBrief { id: string; name: string; role: string; permissions: string[] | null }
+export interface Company { id: string; name: string; taxNo?: string; legalPerson?: string; industry?: string; address?: string; phone?: string; fiscalYearStart: number; accountingStandard: string; currency: string; status: string; role?: string; createdAt: string; updatedAt: string }
+export interface CompanyUser { id: string; username: string; name: string; email?: string; phone?: string; isEnabled: boolean; role: string; permissions: string | null }
 export interface Period { id: string; year: number; month: number; name: string; startDate: string; endDate: string; status: 'open' | 'closing' | 'closed' }
 export interface Account { code: string; name: string; level: number; nature: string; direction: string; parentCode?: string; isLeaf: boolean; isEnabled: boolean }
 export interface Dimension { id: string; type: string; code: string; name: string; isEnabled: boolean }

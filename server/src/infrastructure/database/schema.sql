@@ -1,26 +1,13 @@
 -- ============================================================
--- 精斗云云会计系统 - 数据库 Schema
--- SQLite，所有金额以"分"为单位存储，避免浮点精度问题
+-- 乐算云系统 - 公司(账套)数据库 Schema
+-- 每个账套对应一个独立的 SQLite 数据库
+-- 所有金额以"分"为单位存储，避免浮点精度问题
 -- ============================================================
 
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
--- ── 用户与权限 ──────────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS users (
-  id          TEXT PRIMARY KEY,
-  username    TEXT NOT NULL UNIQUE,
-  password    TEXT NOT NULL,          -- bcrypt hash
-  name        TEXT NOT NULL,
-  email       TEXT,
-  role        TEXT NOT NULL DEFAULT 'accountant',
-  -- admin | supervisor | accountant | cashier | viewer
-  is_enabled  INTEGER NOT NULL DEFAULT 1,
-  last_login  TEXT,
-  created_at  TEXT NOT NULL,
-  updated_at  TEXT NOT NULL
-);
+-- ── 审计日志 ──────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id          TEXT PRIMARY KEY,
@@ -31,23 +18,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   detail      TEXT,                   -- JSON
   ip          TEXT,
   created_at  TEXT NOT NULL
-);
-
--- ── 企业信息 ────────────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS company (
-  id           TEXT PRIMARY KEY DEFAULT 'default',
-  name         TEXT NOT NULL,
-  tax_no       TEXT,
-  legal_person TEXT,
-  industry     TEXT,
-  address      TEXT,
-  phone        TEXT,
-  fiscal_year_start INTEGER NOT NULL DEFAULT 1,  -- 财年起始月
-  accounting_standard TEXT NOT NULL DEFAULT 'small',  -- small | general
-  currency     TEXT NOT NULL DEFAULT 'CNY',
-  created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL
 );
 
 -- ── 会计期间 ────────────────────────────────────────────────
@@ -120,10 +90,10 @@ CREATE TABLE IF NOT EXISTS vouchers (
   -- draft|pending|approved|posted|reversed
   attachment_count  INTEGER NOT NULL DEFAULT 0,
   attachment_desc   TEXT,
-  prepared_by       TEXT NOT NULL REFERENCES users(id),
-  reviewed_by       TEXT REFERENCES users(id),
-  posted_by         TEXT REFERENCES users(id),
-  reversed_by       TEXT REFERENCES users(id),
+  prepared_by       TEXT NOT NULL,
+  reviewed_by       TEXT,
+  posted_by         TEXT,
+  reversed_by       TEXT,
   reverse_voucher_id TEXT REFERENCES vouchers(id),
   created_at        TEXT NOT NULL,
   updated_at        TEXT NOT NULL
@@ -292,7 +262,7 @@ CREATE TABLE IF NOT EXISTS payrolls (
   total_deductions INTEGER NOT NULL DEFAULT 0,
   total_net      INTEGER NOT NULL DEFAULT 0,
   voucher_id     TEXT REFERENCES vouchers(id),
-  confirmed_by   TEXT REFERENCES users(id),
+  confirmed_by   TEXT,
   confirmed_at   TEXT,
   created_at     TEXT NOT NULL,
   updated_at     TEXT NOT NULL

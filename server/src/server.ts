@@ -10,7 +10,9 @@ import { runMigrations } from './infrastructure/database/migrate'
 import { logger } from './infrastructure/logger'
 import { errorHandler, notFound } from './api/middleware/errorHandler'
 
+import { authenticate, companyContext } from './api/middleware/auth'
 import authRoutes from './api/routes/auth'
+import companyRoutes from './api/routes/companies'
 import voucherRoutes from './api/routes/vouchers'
 import accountRoutes from './api/routes/accounts'
 import reportRoutes from './api/routes/reports'
@@ -45,15 +47,22 @@ app.use(morgan('dev', { stream: { write: msg => logger.info(msg.trim()) } }))
 app.get('/health', (_req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }))
 
 // ── Routes ───────────────────────────────────────────────
+// Auth & company routes (use master DB, no company context needed)
 app.use('/api/auth', authRoutes)
-app.use('/api/vouchers', voucherRoutes)
-app.use('/api/accounts', accountRoutes)
-app.use('/api/reports', reportRoutes)
-app.use('/api/periods', periodRoutes)
-app.use('/api/assets', assetRoutes)
-app.use('/api/invoices', invoiceRoutes)
-app.use('/api/attachments', attachmentRoutes)
-app.use('/api/closing', closingRoutes)
+app.use('/api/companies', companyRoutes)
+
+// Accounting routes (require auth + company context via X-Company-Id header)
+const companyRouter = express.Router()
+companyRouter.use(authenticate, companyContext)
+companyRouter.use('/vouchers', voucherRoutes)
+companyRouter.use('/accounts', accountRoutes)
+companyRouter.use('/reports', reportRoutes)
+companyRouter.use('/periods', periodRoutes)
+companyRouter.use('/assets', assetRoutes)
+companyRouter.use('/invoices', invoiceRoutes)
+companyRouter.use('/attachments', attachmentRoutes)
+companyRouter.use('/closing', closingRoutes)
+app.use('/api', companyRouter)
 
 // ── Error handling ────────────────────────────────────────
 app.use(notFound)
@@ -64,7 +73,7 @@ async function bootstrap() {
   try {
     runMigrations()
     app.listen(PORT, () => {
-      logger.info(`🚀 精斗云云会计系统后端启动: http://localhost:${PORT}`)
+      logger.info(`🚀 乐算云系统后端启动: http://localhost:${PORT}`)
     })
   } catch (err) {
     logger.error('启动失败', err)

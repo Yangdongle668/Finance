@@ -65,10 +65,10 @@ services:
       - finance_data:/app/data
     networks:
       - finance_net
-    # 仅当 finance.db 不存在时才运行种子
+    # 仅当 master.db 不存在时才运行种子
     command: >
       sh -c "
-        if [ ! -f /app/data/finance.db ]; then
+        if [ ! -f /app/data/master.db ]; then
           echo '🌱 首次部署，初始化数据库...' &&
           node -e \"const {runMigrations}=require('./dist/infrastructure/database/migrate');runMigrations()\" &&
           node dist/infrastructure/database/seed.js &&
