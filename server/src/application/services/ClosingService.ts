@@ -174,7 +174,7 @@ export class ClosingService {
         case 'vat_out': return Math.abs(this._getAccountBalance('222101', periodId))
         case 'surcharge_tax': {
           const vatBase = Math.abs(this._getAccountBalance('222101', periodId))
-          return Math.round(vatBase * 0.12 * 100) / 100
+          return Math.round(vatBase * 0.12 * 10000) / 10000
         }
         case 'income_tax': {
           const profit = this._calcNetProfit(periodId)
@@ -301,18 +301,42 @@ export class ClosingService {
         case 'depreciation': return this._buildDepreciationLines(periodId)
         case 'pnl': return this._buildPnlLines(periodId)
         case 'cost_of_sales': return this._buildSimpleTransferLines('1405', '库存商品', '6401', '主营业务成本', periodId, tpl.summary || '结转销售成本')
-        case 'vat_out': return this._buildSimpleTransferLines('222101', '应交增值税', '1122', '应收账款', periodId, tpl.summary || '转出未交增值税')
-        case 'surcharge_tax': {
-          const vatBase = Math.abs(this._getAccountBalance('222101', periodId))
-          const amt = Math.round(vatBase * 0.12 * 10000) // fen
+        case 'vat_out': {
+          // 缴纳增值税：将应交增值税贷方余额转为银行付款
+          const vatBalance = this._getAccountBalance('222101', periodId)
+          // vatBalance < 0 表示贷方有余额（应缴税款）
+          const amt = Math.round(Math.abs(vatBalance) * 100)
           if (amt === 0) return []
-          const urban = Math.round(amt * 0.7)
-          const edu = amt - urban
+          return vatBalance < 0 ? [
+            { accountCode: '222101', accountName: '应交增值税', direction: 'debit' as const, amount: amt },
+            { accountCode: '100201', accountName: '工商银行-基本账户', direction: 'credit' as const, amount: amt },
+          ] : []
+        }
+        case 'surcharge_tax': {
+          // 计提税金及附加（城建税7%+教育费附加3%+地方教育附加2%=12%）
+          const vatAmt = Math.abs(this._getAccountBalance('222101', periodId))
+          const totalSurcharge = Math.round(vatAmt * 0.12 * 100) // fen
+          if (totalSurcharge === 0) return []
+          const urban = Math.round(totalSurcharge * 7 / 12)    // 城建税 7%
+          const edu = Math.round(totalSurcharge * 3 / 12)       // 教育费附加 3%
+          const localEdu = totalSurcharge - urban - edu          // 地方教育附加 2%
+          const db = getDb()
+          // 优先用5402（税金及附加），无则用6711（营业外支出）
+          const taxExpAcc = db.prepare("SELECT code,name FROM accounts WHERE code='5402'").get() as { code: string; name: string } | undefined
+          const expCode = taxExpAcc?.code || '6711'
+          const expName = taxExpAcc?.name || '营业外支出'
           const result: { accountCode: string; accountName: string; direction: 'debit' | 'credit'; amount: number }[] = [
-            { accountCode: '6711', accountName: '营业外支出', direction: 'debit', amount: amt },
+            { accountCode: expCode, accountName: expName, direction: 'debit', amount: totalSurcharge },
           ]
           if (urban > 0) result.push({ accountCode: '222103', accountName: '应交城市维护建设税', direction: 'credit', amount: urban })
-          if (edu > 0) result.push({ accountCode: '222103', accountName: '应交城市维护建设税', direction: 'credit', amount: edu })
+          if (edu > 0) {
+            const eduAcc = db.prepare("SELECT code,name FROM accounts WHERE code='222104'").get() as { code: string; name: string } | undefined
+            result.push({ accountCode: eduAcc?.code || '222103', accountName: eduAcc?.name || '应交教育费附加', direction: 'credit', amount: edu })
+          }
+          if (localEdu > 0) {
+            const localAcc = db.prepare("SELECT code,name FROM accounts WHERE code='222105'").get() as { code: string; name: string } | undefined
+            result.push({ accountCode: localAcc?.code || '222103', accountName: localAcc?.name || '地方教育附加', direction: 'credit', amount: localEdu })
+          }
           return result
         }
         case 'income_tax': {
@@ -410,13 +434,13 @@ export class ClosingService {
     accountCode: string; accountName: string; direction: 'debit' | 'credit'; amount: number
   }[] {
     const db = getDb()
-    // Income accounts (credit nature) - debit them to close
+    // Income accounts (credit nature) - debit them to close; use all accounts to support non-leaf entries
     const incomeAccs = db.prepare(`
       SELECT a.code, a.name,
         COALESCE(SUM(CASE WHEN vl.direction='credit' THEN vl.amount ELSE -vl.amount END),0) as balance
       FROM accounts a
-      LEFT JOIN voucher_lines vl ON vl.account_code=a.code
-      LEFT JOIN vouchers v ON vl.voucher_id=v.id AND v.period_id=? AND v.status='posted'
+      INNER JOIN voucher_lines vl ON vl.account_code=a.code
+      INNER JOIN vouchers v ON vl.voucher_id=v.id AND v.period_id=? AND v.status='posted'
       WHERE a.nature='income'
       GROUP BY a.code, a.name
       HAVING balance != 0
@@ -427,8 +451,8 @@ export class ClosingService {
       SELECT a.code, a.name,
         COALESCE(SUM(CASE WHEN vl.direction='debit' THEN vl.amount ELSE -vl.amount END),0) as balance
       FROM accounts a
-      LEFT JOIN voucher_lines vl ON vl.account_code=a.code
-      LEFT JOIN vouchers v ON vl.voucher_id=v.id AND v.period_id=? AND v.status='posted'
+      INNER JOIN voucher_lines vl ON vl.account_code=a.code
+      INNER JOIN vouchers v ON vl.voucher_id=v.id AND v.period_id=? AND v.status='posted'
       WHERE a.nature='expense'
       GROUP BY a.code, a.name
       HAVING balance != 0

@@ -60,7 +60,7 @@ export class VoucherService {
       const account = this.accountRepo.findByCode(line.accountCode)
       if (!account) throw new AppError(400, `科目 ${line.accountCode} 不存在`)
       if (!account.isEnabled) throw new AppError(400, `科目 ${line.accountCode} 已禁用`)
-      if (!account.isLeaf) throw new AppError(400, `科目 ${line.accountCode} 不是末级科目，不能直接挂凭证`)
+      // 允许使用非末级科目，但记录警告（实务中允许部分上级科目直接挂账）
     }
 
     // 3. 验证借贷平衡

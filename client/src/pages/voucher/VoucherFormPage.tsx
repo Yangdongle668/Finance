@@ -59,7 +59,8 @@ export default function VoucherFormPage() {
   const [allVoucherIds, setAllVoucherIds] = useState<string[]>([])
 
   useEffect(() => {
-    api.leafAccounts().then(r => setAccounts(r.data.data))
+    // 加载所有启用科目（含一级和末级），实际允许选择任意层级
+    api.listAccounts(true).then(r => setAccounts(r.data.data))
   }, [])
 
   // Load list of voucher IDs for prev/next navigation
@@ -442,7 +443,10 @@ export default function VoucherFormPage() {
                     variant="borderless"
                     placeholder="输入科目编码或名称"
                     optionFilterProp="label"
-                    options={accounts.map(a => ({ value: a.code, label: `${a.code} ${a.name}` }))}
+                    options={accounts.map(a => ({
+                      value: a.code,
+                      label: `${a.code} ${a.name}${!a.isLeaf ? ' [上级]' : ''}`,
+                    }))}
                   />
                 </td>
                 <td

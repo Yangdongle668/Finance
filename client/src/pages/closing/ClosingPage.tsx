@@ -113,11 +113,11 @@ function SettingsModal({
   const [saving, setSaving] = useState(false)
   const [form] = Form.useForm()
   const [lines, setLines] = useState<ClosingTemplateLine[]>([])
-  const [leafAccounts, setLeafAccounts] = useState<{ code: string; name: string }[]>([])
+  const [leafAccounts, setLeafAccounts] = useState<{ code: string; name: string; isLeaf?: boolean }[]>([])
 
   useEffect(() => {
     if (open) {
-      api.leafAccounts().then(r => setLeafAccounts(r.data.data.map(a => ({ code: a.code, name: a.name }))))
+      api.listAccounts(true).then(r => setLeafAccounts(r.data.data.map(a => ({ code: a.code, name: a.name, isLeaf: a.isLeaf }))))
     }
   }, [open])
 
@@ -203,7 +203,7 @@ function SettingsModal({
           size="small" style={{ width: '100%' }} value={v || undefined}
           showSearch filterOption={(input, opt) => `${opt?.value} ${opt?.label}`.toLowerCase().includes(input.toLowerCase())}
           onChange={val => updateLine(i, 'accountCode', val)}
-          options={leafAccounts.map(a => ({ value: a.code, label: `${a.code} ${a.name}` }))}
+          options={leafAccounts.map(a => ({ value: a.code, label: `${a.code} ${a.name}${!a.isLeaf ? ' [上级]' : ''}` }))}
           placeholder="选择科目"
         />
       ),
