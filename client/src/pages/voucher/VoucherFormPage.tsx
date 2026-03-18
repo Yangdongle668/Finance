@@ -3,21 +3,25 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Button, Select, DatePicker, InputNumber, Input, Space, Typography, message, Dropdown, Tooltip } from 'antd'
 import {
   SaveOutlined, PlusOutlined, InboxOutlined, SettingOutlined,
-  SmileOutlined, FullscreenOutlined, DeleteOutlined,
+  CameraOutlined, FullscreenOutlined, DeleteOutlined,
+  LeftOutlined, RightOutlined, SearchOutlined, PaperClipOutlined,
+  EllipsisOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { api, type Account, type VoucherWord } from '@/api/client'
 import { usePeriodStore } from '@/stores/periodStore'
 import { useAuthStore } from '@/stores/authStore'
+import VoucherTabBar from './VoucherTabBar'
+import AmountGrid, { AmountGridHeader } from './AmountGrid'
 
 const { Text, Title } = Typography
 
 const VOUCHER_WORDS: VoucherWord[] = ['记', '收', '付', '转']
 const VOUCHER_WORD_TITLES: Record<VoucherWord, string> = {
-  '记': '记 账 凭 证',
-  '收': '收 款 凭 证',
-  '付': '付 款 凭 证',
-  '转': '转 账 凭 证',
+  '记': '记账凭证',
+  '收': '收款凭证',
+  '付': '付款凭证',
+  '转': '转账凭证',
 }
 
 interface LineItem {
@@ -53,12 +57,10 @@ export default function VoucherFormPage() {
   const [lines, setLines] = useState<LineItem[]>([emptyLine(), emptyLine(), emptyLine(), emptyLine()])
   const [saving, setSaving] = useState(false)
 
-  // Load accounts
   useEffect(() => {
     api.leafAccounts().then(r => setAccounts(r.data.data))
   }, [])
 
-  // Get next voucher number
   useEffect(() => {
     if (!currentPeriod || isEdit) return
     api.getNextVoucherNo(currentPeriod.id, voucherWord).then(r => {
@@ -66,7 +68,6 @@ export default function VoucherFormPage() {
     })
   }, [currentPeriod?.id, voucherWord, isEdit])
 
-  // Load existing voucher for edit
   useEffect(() => {
     if (!id) return
     api.getVoucher(id).then(r => {
@@ -83,7 +84,6 @@ export default function VoucherFormPage() {
         debitAmount: l.direction === 'debit' ? l.amount / 100 : null,
         creditAmount: l.direction === 'credit' ? l.amount / 100 : null,
       }))
-      // Ensure at least 4 rows
       while (loadedLines.length < 4) loadedLines.push(emptyLine())
       setLines(loadedLines)
     })
@@ -98,17 +98,14 @@ export default function VoucherFormPage() {
       const updated = prev.map(l => {
         if (l.key !== key) return l
         const newLine = { ...l, [field]: value }
-        // Debit/credit mutually exclusive
         if (field === 'debitAmount' && value) newLine.creditAmount = null
         if (field === 'creditAmount' && value) newLine.debitAmount = null
-        // Set account name when code selected
         if (field === 'accountCode') {
           const acc = accounts.find(a => a.code === value)
           newLine.accountName = acc?.name ?? ''
         }
         return newLine
       })
-      // Auto-add row if last row has content
       const last = updated[updated.length - 1]
       if (last && (last.summary || last.accountCode || last.debitAmount || last.creditAmount)) {
         updated.push(emptyLine())
@@ -163,11 +160,9 @@ export default function VoucherFormPage() {
         message.success('凭证保存成功')
       }
       if (andNew) {
-        // Reset form
         setLines([emptyLine(), emptyLine(), emptyLine(), emptyLine()])
         setAttachmentCount(0)
         setVoucherDate(dayjs())
-        // Get new number
         if (currentPeriod) {
           const r = await api.getNextVoucherNo(currentPeriod.id, voucherWord)
           setVoucherNo(r.data.data.voucherNo)
@@ -184,14 +179,17 @@ export default function VoucherFormPage() {
   const voucherNoNum = voucherNo.split('-')[1] || '1'
 
   return (
-    <div style={{ background: '#fff', minHeight: '100%' }}>
+    <div style={{ background: '#fff', minHeight: '100%', margin: '-24px', display: 'flex', flexDirection: 'column' }}>
+      {/* Tab navigation */}
+      <VoucherTabBar />
+
       {/* Toolbar */}
       <div style={{ padding: '8px 16px', borderBottom: '1px solid #e8e8e8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Space>
-          <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={() => handleSave(true)}>
+          <Button type="primary" loading={saving} onClick={() => handleSave(true)}>
             保存并新增
           </Button>
-          <Button icon={<SaveOutlined />} loading={saving} onClick={() => handleSave(false)}>
+          <Button loading={saving} onClick={() => handleSave(false)}>
             保存
           </Button>
           <Dropdown menu={{ items: [{ key: 'draft', label: '暂存为草稿' }] }}>
@@ -200,21 +198,24 @@ export default function VoucherFormPage() {
           <Dropdown menu={{ items: [{ key: 'none', label: '暂无模板' }] }}>
             <Button>模板</Button>
           </Dropdown>
-          <Button icon={<SettingOutlined />}>偏好设置</Button>
-          <Button icon={<SmileOutlined />} type="text" />
+          <Button>偏好设置</Button>
+          <Button icon={<CameraOutlined />} type="text" />
         </Space>
         <Space>
-          <Tooltip title="快捷键"><Text type="secondary" style={{ cursor: 'pointer', fontSize: 13 }}>快捷键</Text></Tooltip>
-          <Tooltip title="大屏模式"><Button type="text" size="small" icon={<FullscreenOutlined />} /></Tooltip>
+          <Tooltip title="快捷键"><Text type="secondary" style={{ cursor: 'pointer', fontSize: 13 }}>⌨ 快捷键</Text></Tooltip>
+          <Tooltip title="大屏模式"><Text type="secondary" style={{ cursor: 'pointer', fontSize: 13 }}>⊞ 大屏</Text></Tooltip>
+          <Tooltip title="护眼模式"><Text type="secondary" style={{ cursor: 'pointer', fontSize: 13 }}>👁 护眼</Text></Tooltip>
+          <Button type="text" size="small" icon={<LeftOutlined />} />
+          <Button type="text" size="small" icon={<RightOutlined />} />
         </Space>
       </div>
 
       {/* Voucher Header */}
-      <div style={{ padding: '16px 24px 0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <Space size={16}>
+      <div style={{ padding: '12px 24px 0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Space size={12}>
             <Space size={4}>
-              <Text>凭证字:</Text>
+              <Text>凭证字</Text>
               <Select
                 value={voucherWord}
                 onChange={setVoucherWord}
@@ -234,7 +235,7 @@ export default function VoucherFormPage() {
               <Text>号</Text>
             </Space>
             <Space size={4}>
-              <Text>日期:</Text>
+              <Text>日期</Text>
               <DatePicker
                 value={voucherDate}
                 onChange={d => d && setVoucherDate(d)}
@@ -244,18 +245,9 @@ export default function VoucherFormPage() {
               />
             </Space>
           </Space>
-        </div>
 
-        {/* Title area */}
-        <div style={{ textAlign: 'center', marginBottom: 8 }}>
-          <Title level={4} style={{ margin: 0, letterSpacing: 8 }}>
-            {VOUCHER_WORD_TITLES[voucherWord]}
-          </Title>
-          <Text type="secondary">{periodLabel}</Text>
-        </div>
-
-        <div style={{ textAlign: 'right', marginBottom: 8 }}>
           <Space size={4}>
+            <SearchOutlined style={{ color: '#999' }} />
             <Text type="secondary">附件</Text>
             <InputNumber
               value={attachmentCount}
@@ -265,34 +257,62 @@ export default function VoucherFormPage() {
               style={{ width: 50 }}
             />
             <Text type="secondary">张</Text>
+            <a style={{ color: '#1677ff', fontSize: 13, marginLeft: 8 }}>
+              <PaperClipOutlined /> 上传附件
+            </a>
           </Space>
+        </div>
+
+        {/* Title */}
+        <div style={{ textAlign: 'center', margin: '4px 0 8px' }}>
+          <Title level={4} style={{ margin: 0, letterSpacing: 8, fontWeight: 700 }}>
+            {VOUCHER_WORD_TITLES[voucherWord]}
+          </Title>
+          <Text type="secondary" style={{ color: '#1677ff' }}>{periodLabel}</Text>
         </div>
       </div>
 
-      {/* Entry Table */}
-      <div style={{ padding: '0 24px' }}>
+      {/* Entry Table with 金算盘 Grid */}
+      <div style={{ padding: '0 24px', flex: 1, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #d9d9d9' }}>
           <thead>
+            {/* First header row */}
             <tr style={{ background: '#fafafa' }}>
-              <th style={thStyle({ width: 50 })}>序号</th>
-              <th style={thStyle({ width: 200 })}>摘要</th>
-              <th style={thStyle({ minWidth: 220 })}>科目</th>
-              <th style={thStyle({ width: 160 })}>借方金额</th>
-              <th style={thStyle({ width: 160 })}>贷方金额</th>
-              <th style={thStyle({ width: 40 })}></th>
+              <th rowSpan={2} style={thStyle({ width: 40 })}></th>
+              <th rowSpan={2} style={thStyle({ width: 260 })}>摘要</th>
+              <th rowSpan={2} style={thStyle({ minWidth: 260 })}>科目</th>
+              <th colSpan={1} style={thStyle({ padding: '4px 0', borderBottom: 'none' })}>
+                <div style={{ textAlign: 'center', color: '#d4380d', fontWeight: 600, fontSize: 13 }}>借方金额</div>
+              </th>
+              <th colSpan={1} style={thStyle({ padding: '4px 0', borderBottom: 'none' })}>
+                <div style={{ textAlign: 'center', color: '#1677ff', fontWeight: 600, fontSize: 13 }}>贷方金额</div>
+              </th>
+              <th rowSpan={2} style={thStyle({ width: 32 })}></th>
+            </tr>
+            {/* Second header row: digit labels */}
+            <tr style={{ background: '#fafafa' }}>
+              <th style={thStyle({ padding: 0 })}>
+                <AmountGridHeader type="debit" />
+              </th>
+              <th style={thStyle({ padding: 0 })}>
+                <AmountGridHeader type="credit" />
+              </th>
             </tr>
           </thead>
           <tbody>
             {lines.map((line, idx) => (
               <tr key={line.key} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                <td style={tdStyle({ textAlign: 'center', color: '#999' })}>{idx + 1}</td>
-                <td style={tdStyle()}>
+                <td style={tdStyle({ textAlign: 'center', color: '#999', fontSize: 13 })}>{idx + 1}</td>
+                <td style={tdStyle({ position: 'relative' })}>
                   <Input
                     value={line.summary}
                     onChange={e => updateLine(line.key, 'summary', e.target.value)}
                     variant="borderless"
                     placeholder="摘要"
-                    style={{ width: '100%' }}
+                    style={{ width: 'calc(100% - 24px)' }}
+                  />
+                  <EllipsisOutlined
+                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', color: '#999', cursor: 'pointer' }}
                   />
                 </td>
                 <td style={tdStyle()}>
@@ -307,28 +327,18 @@ export default function VoucherFormPage() {
                     options={accounts.map(a => ({ value: a.code, label: `${a.code} ${a.name}` }))}
                   />
                 </td>
-                <td style={tdStyle({ background: '#fffbe6' })}>
-                  <InputNumber
+                <td style={tdStyle({ padding: 0 })}>
+                  <AmountGrid
                     value={line.debitAmount}
                     onChange={val => updateLine(line.key, 'debitAmount', val)}
-                    style={{ width: '100%' }}
-                    variant="borderless"
-                    min={0}
-                    precision={2}
-                    placeholder=""
-                    controls={false}
+                    type="debit"
                   />
                 </td>
-                <td style={tdStyle({ background: '#f0f5ff' })}>
-                  <InputNumber
+                <td style={tdStyle({ padding: 0 })}>
+                  <AmountGrid
                     value={line.creditAmount}
                     onChange={val => updateLine(line.key, 'creditAmount', val)}
-                    style={{ width: '100%' }}
-                    variant="borderless"
-                    min={0}
-                    precision={2}
-                    placeholder=""
-                    controls={false}
+                    type="credit"
                   />
                 </td>
                 <td style={tdStyle({ textAlign: 'center' })}>
@@ -345,56 +355,55 @@ export default function VoucherFormPage() {
               </tr>
             ))}
             {/* Summary row */}
-            <tr style={{ background: '#f6ffed', fontWeight: 600, borderTop: '2px solid #52c41a' }}>
+            <tr style={{ background: '#fafafa', fontWeight: 600, borderTop: '2px solid #d9d9d9' }}>
               <td style={tdStyle({ textAlign: 'center' })}></td>
-              <td style={tdStyle()}>合计</td>
-              <td style={tdStyle()}>
-                {balanced
-                  ? <Text type="success" style={{ fontSize: 12 }}>借贷平衡</Text>
-                  : <Text type="danger" style={{ fontSize: 12 }}>差额: ¥{Math.abs(totalDebit - totalCredit).toFixed(2)}</Text>
-                }
+              <td style={tdStyle()} colSpan={2}>
+                <Space>
+                  <Text strong>合计:</Text>
+                  {balanced
+                    ? <Text type="success" style={{ fontSize: 12 }}>借贷平衡</Text>
+                    : <Text type="danger" style={{ fontSize: 12 }}>差额: ¥{Math.abs(totalDebit - totalCredit).toFixed(2)}</Text>
+                  }
+                </Space>
               </td>
-              <td style={tdStyle({ textAlign: 'right', color: '#d4380d', background: '#fffbe6' })}>
-                {totalDebit > 0 ? `¥${totalDebit.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` : ''}
+              <td style={tdStyle({ padding: 0 })}>
+                <AmountGrid value={totalDebit > 0 ? totalDebit : null} readOnly type="debit" />
               </td>
-              <td style={tdStyle({ textAlign: 'right', color: '#389e0d', background: '#f0f5ff' })}>
-                {totalCredit > 0 ? `¥${totalCredit.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` : ''}
+              <td style={tdStyle({ padding: 0 })}>
+                <AmountGrid value={totalCredit > 0 ? totalCredit : null} readOnly type="credit" />
               </td>
               <td style={tdStyle()}></td>
             </tr>
           </tbody>
         </table>
-
-        <div style={{ marginTop: 4, textAlign: 'right' }}>
-          <Button type="dashed" size="small" icon={<PlusOutlined />} onClick={() => setLines(prev => [...prev, emptyLine()])}>
-            添加行
-          </Button>
-        </div>
       </div>
 
       {/* Footer */}
-      <div style={{ padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f0f0f0', marginTop: 16 }}>
+      <div style={{ padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f0f0f0' }}>
         <Space>
           <Text type="secondary">制单人:</Text>
           <Text strong>{user?.name || '—'}</Text>
+          <Button type="text" size="small" icon={<SettingOutlined style={{ fontSize: 12 }} />} />
         </Space>
         <Space>
-          <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={() => handleSave(true)}>
+          <Button type="primary" loading={saving} onClick={() => handleSave(true)}>
             保存并新增
           </Button>
-          <Button icon={<SaveOutlined />} loading={saving} onClick={() => handleSave(false)}>
+          <Button loading={saving} onClick={() => handleSave(false)}>
             保存
           </Button>
+          <Dropdown menu={{ items: [{ key: 'draft', label: '暂存为草稿' }] }}>
+            <Button>暂存</Button>
+          </Dropdown>
         </Space>
       </div>
     </div>
   )
 }
 
-// Style helpers
 function thStyle(extra: React.CSSProperties = {}): React.CSSProperties {
   return {
-    padding: '8px 12px',
+    padding: '8px 4px',
     textAlign: 'center',
     fontSize: 13,
     fontWeight: 500,
@@ -407,9 +416,10 @@ function thStyle(extra: React.CSSProperties = {}): React.CSSProperties {
 function tdStyle(extra: React.CSSProperties = {}): React.CSSProperties {
   return {
     padding: '2px 4px',
-    borderRight: '1px solid #f0f0f0',
-    borderBottom: '1px solid #f0f0f0',
+    borderRight: '1px solid #e8e8e8',
+    borderBottom: '1px solid #e8e8e8',
     verticalAlign: 'middle',
+    height: 40,
     ...extra,
   }
 }

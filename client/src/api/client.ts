@@ -105,6 +105,8 @@ export const api = {
     client.get<ApiResponse<IncomeStatement>>(`/reports/income-statement/${periodId}`),
   dashboard: (periodId: string) =>
     client.get<ApiResponse<Dashboard>>(`/reports/dashboard/${periodId}`),
+  voucherSummary: (periodId: string, startDate?: string, endDate?: string) =>
+    client.get<ApiResponse<VoucherSummaryResult>>(`/reports/voucher-summary/${periodId}`, { params: { startDate, endDate } }),
 
   // Assets
   listAssets: (params?: { status?: string; category?: string }) =>
@@ -181,6 +183,9 @@ export interface GeneralLedgerRow { accountCode: string; accountName: string; na
 export interface BalanceSheet { assets: Record<string, Record<string, number>>; liabilities: Record<string, Record<string, number>>; equity: Record<string, number> }
 export interface IncomeStatement { revenue: number; costOfGoods: number; grossProfit: number; grossMargin: number; sellingExp: number; adminExp: number; financeExp: number; operatingProfit: number; operatingMargin: number; netProfit: number; netMargin: number }
 export interface Dashboard { funds: { cash: number; bank: number; total: number; receivable: number; payable: number }; profitability: { netProfit: number; grossMargin: number; netMargin: number }; solvency: { totalAssets: number; totalLiabilities: number; debtRatio: number } }
+
+export interface VoucherSummaryRow { accountCode: string; accountName: string; debitAmount: number; creditAmount: number }
+export interface VoucherSummaryResult { rows: VoucherSummaryRow[]; totalVouchers: number; totalAttachments: number }
 
 export interface Asset { id: string; assetNo: string; name: string; category: string; originalValue: number; usefulLife: number; acquiredDate: string; status: string }
 export interface Invoice { id: string; direction: string; invoiceType: string; invoiceNo: string; invoiceDate: string; sellerName: string; totalAmount: number; taxAmount: number; status: string }

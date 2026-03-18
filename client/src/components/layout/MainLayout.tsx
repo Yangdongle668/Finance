@@ -20,6 +20,7 @@ const menuItems = [
     children: [
       { key: '/vouchers/new', label: '录凭证' },
       { key: '/vouchers', label: '查凭证' },
+      { key: '/vouchers/summary', label: '凭证汇总表' },
       { key: '/voucher/attachment-manage', label: '原始凭证管理' },
     ]
   },

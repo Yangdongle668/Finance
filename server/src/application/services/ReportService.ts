@@ -224,6 +224,56 @@ export class ReportService {
     }
   }
 
+  /** 凭证汇总表：按科目汇总某期间内所有已记账凭证的借贷金额 */
+  voucherSummary(periodId: string, startDate?: string, endDate?: string) {
+    const db = getDb()
+
+    // Aggregate by account code from posted vouchers
+    const dateFilter = startDate && endDate
+      ? `AND v.voucher_date BETWEEN ? AND ?`
+      : ''
+    const params: string[] = [periodId]
+    if (startDate && endDate) { params.push(startDate, endDate) }
+
+    const rows = db.prepare(`
+      SELECT
+        vl.account_code,
+        vl.account_name,
+        SUM(CASE WHEN vl.direction = 'debit' THEN vl.amount ELSE 0 END) as debit_total,
+        SUM(CASE WHEN vl.direction = 'credit' THEN vl.amount ELSE 0 END) as credit_total
+      FROM voucher_lines vl
+      JOIN vouchers v ON vl.voucher_id = v.id
+      WHERE v.period_id = ? AND v.status = 'posted' ${dateFilter}
+      GROUP BY vl.account_code, vl.account_name
+      ORDER BY vl.account_code
+    `).all(...params) as {
+      account_code: string; account_name: string; debit_total: number; credit_total: number
+    }[]
+
+    // Count vouchers
+    const countRow = db.prepare(`
+      SELECT COUNT(*) as cnt FROM vouchers
+      WHERE period_id = ? AND status = 'posted' ${dateFilter}
+    `).get(...params) as { cnt: number }
+
+    // Count attachments
+    const attachRow = db.prepare(`
+      SELECT COALESCE(SUM(attachment_count), 0) as cnt FROM vouchers
+      WHERE period_id = ? AND status = 'posted' ${dateFilter}
+    `).get(...params) as { cnt: number }
+
+    return {
+      rows: rows.map(r => ({
+        accountCode: r.account_code,
+        accountName: r.account_name,
+        debitAmount: r.debit_total / 100,
+        creditAmount: r.credit_total / 100,
+      })),
+      totalVouchers: countRow.cnt,
+      totalAttachments: attachRow.cnt,
+    }
+  }
+
   /** 现金流量表（直接法，简化） */
   cashFlowStatement(periodId: string) {
     const db = getDb()

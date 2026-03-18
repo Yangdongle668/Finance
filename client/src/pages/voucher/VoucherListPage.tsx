@@ -1,22 +1,19 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Table, Button, Space, Input, Select, Card, Typography, Popconfirm, message, Row, Col, Checkbox, Dropdown } from 'antd'
+import { Table, Button, Space, Select, Typography, Popconfirm, message, Checkbox, Dropdown, Tooltip } from 'antd'
 import {
   PlusOutlined, FilterOutlined, ReloadOutlined,
   EditOutlined, DeleteOutlined, MoreOutlined,
   CheckOutlined, PrinterOutlined, ImportOutlined, ExportOutlined,
+  EyeOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { api, type Voucher, type VoucherLine } from '@/api/client'
 import { usePeriodStore } from '@/stores/periodStore'
+import VoucherTabBar from './VoucherTabBar'
 
 const { Text } = Typography
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: '草稿', pending: '待审核', approved: '已审核', posted: '已记账', reversed: '已冲销'
-}
-
-/** Flatten voucher + lines into table rows for multi-line display */
 interface FlatRow {
   key: string
   voucherId: string
@@ -42,42 +39,25 @@ function flattenVouchers(vouchers: Voucher[]): FlatRow[] {
     const lines = v.lines ?? []
     if (lines.length === 0) {
       rows.push({
-        key: v.id,
-        voucherId: v.id,
-        voucherNo: v.voucherNo,
-        voucherWord: v.voucherWord || '记',
-        voucherDate: v.voucherDate,
-        status: v.status,
-        summary: v.summary,
-        accountCode: '',
-        accountName: '',
-        debitAmount: 0,
-        creditAmount: 0,
-        attachmentCount: v.attachmentCount ?? 0,
-        preparedBy: v.preparedBy,
-        reviewedBy: v.reviewedBy ?? '',
-        lineIndex: 0,
-        lineCount: 1,
+        key: v.id, voucherId: v.id, voucherNo: v.voucherNo,
+        voucherWord: v.voucherWord || '记', voucherDate: v.voucherDate,
+        status: v.status, summary: v.summary, accountCode: '', accountName: '',
+        debitAmount: 0, creditAmount: 0, attachmentCount: v.attachmentCount ?? 0,
+        preparedBy: v.preparedBy, reviewedBy: v.reviewedBy ?? '',
+        lineIndex: 0, lineCount: 1,
       })
     } else {
       lines.forEach((l: VoucherLine, i: number) => {
         rows.push({
-          key: `${v.id}_${i}`,
-          voucherId: v.id,
-          voucherNo: v.voucherNo,
-          voucherWord: v.voucherWord || '记',
-          voucherDate: v.voucherDate,
-          status: v.status,
-          summary: l.remark || v.summary,
-          accountCode: l.accountCode,
-          accountName: l.accountName,
+          key: `${v.id}_${i}`, voucherId: v.id, voucherNo: v.voucherNo,
+          voucherWord: v.voucherWord || '记', voucherDate: v.voucherDate,
+          status: v.status, summary: l.remark || v.summary,
+          accountCode: l.accountCode, accountName: l.accountName,
           debitAmount: l.direction === 'debit' ? l.amount / 100 : 0,
           creditAmount: l.direction === 'credit' ? l.amount / 100 : 0,
           attachmentCount: v.attachmentCount ?? 0,
-          preparedBy: v.preparedBy,
-          reviewedBy: v.reviewedBy ?? '',
-          lineIndex: i,
-          lineCount: lines.length,
+          preparedBy: v.preparedBy, reviewedBy: v.reviewedBy ?? '',
+          lineIndex: i, lineCount: lines.length,
         })
       })
     }
@@ -133,18 +113,23 @@ export default function VoucherListPage() {
   const totalDebit = flatRows.reduce((s, r) => s + r.debitAmount, 0)
   const totalCredit = flatRows.reduce((s, r) => s + r.creditAmount, 0)
 
+  const currentPeriodLabel = currentPeriod
+    ? `${currentPeriod.year}年${String(currentPeriod.month).padStart(2, '0')}期`
+    : ''
+
   const columns: ColumnsType<FlatRow> = [
     {
-      title: '操作', width: 90, fixed: 'left',
+      title: '操作', width: 80, fixed: 'left',
       render: (_, r) => {
         if (r.lineIndex > 0) return null
         return (
-          <Space size={2}>
-            <Button size="small" type="text" icon={<EditOutlined />}
-              onClick={() => navigate(`/vouchers/${r.voucherId}/edit`)} />
+          <Space direction="vertical" size={0} style={{ fontSize: 12 }}>
+            <a onClick={() => navigate(`/vouchers/${r.voucherId}/edit`)} style={{ color: '#1677ff' }}>
+              <EditOutlined />
+            </a>
             {r.status === 'draft' && (
               <Popconfirm title="确认删除此凭证？" onConfirm={() => handleDelete(r.voucherId)}>
-                <Button size="small" type="text" danger icon={<DeleteOutlined />} />
+                <a style={{ color: '#ff4d4f' }}><DeleteOutlined /></a>
               </Popconfirm>
             )}
             <Dropdown menu={{ items: [
@@ -152,7 +137,7 @@ export default function VoucherListPage() {
               ...(r.status === 'draft' ? [{ key: 'submit', label: '提交审核', onClick: async () => { await api.submitVoucher(r.voucherId); fetchData() } }] : []),
               ...(r.status === 'pending' ? [{ key: 'approve', label: '审核通过', onClick: async () => { await api.approveVoucher(r.voucherId); fetchData() } }] : []),
             ] }}>
-              <Button size="small" type="text" icon={<MoreOutlined />} />
+              <a><MoreOutlined /></a>
             </Dropdown>
           </Space>
         )
@@ -164,7 +149,7 @@ export default function VoucherListPage() {
       onCell: (r) => ({ rowSpan: r.lineIndex === 0 ? r.lineCount : 0 }),
     },
     {
-      title: '凭证字号', width: 100,
+      title: '凭证字号', width: 100, sorter: true,
       render: (_, r) => (
         <a onClick={() => navigate(`/vouchers/${r.voucherId}`)} style={{ color: '#1677ff' }}>
           {r.voucherNo}
@@ -172,158 +157,121 @@ export default function VoucherListPage() {
       ),
       onCell: (r) => ({ rowSpan: r.lineIndex === 0 ? r.lineCount : 0 }),
     },
+    { title: '摘要', dataIndex: 'summary', ellipsis: true },
     {
-      title: '摘要', dataIndex: 'summary', ellipsis: true, width: 180,
-    },
-    {
-      title: '科目', width: 200, ellipsis: true,
+      title: '科目', ellipsis: true,
       render: (_, r) => r.accountCode ? `${r.accountCode} ${r.accountName}` : '',
     },
     {
       title: '借方金额', dataIndex: 'debitAmount', width: 130, align: 'right',
-      render: (v: number) => <Text style={{ color: v > 0 ? '#d4380d' : undefined }}>{fmtAmount(v)}</Text>,
+      render: (v: number) => <Text>{fmtAmount(v)}</Text>,
     },
     {
       title: '贷方金额', dataIndex: 'creditAmount', width: 130, align: 'right',
-      render: (v: number) => <Text style={{ color: v > 0 ? '#389e0d' : undefined }}>{fmtAmount(v)}</Text>,
+      render: (v: number) => <Text>{fmtAmount(v)}</Text>,
     },
     {
-      title: '附件', width: 80,
-      render: (_, r) => r.lineIndex === 0 ? <a>上传附件</a> : null,
-      onCell: (r) => ({ rowSpan: r.lineIndex === 0 ? r.lineCount : 0 }),
-    },
-    {
-      title: '制单人', dataIndex: 'preparedBy', width: 80,
-      onCell: (r) => ({ rowSpan: r.lineIndex === 0 ? r.lineCount : 0 }),
-    },
-    {
-      title: '审核人', dataIndex: 'reviewedBy', width: 80,
+      title: <><EyeOutlined /></>, width: 70, align: 'center',
+      render: (_, r) => r.lineIndex === 0 ? <a style={{ color: '#1677ff', fontSize: 12 }}>上传</a> : null,
       onCell: (r) => ({ rowSpan: r.lineIndex === 0 ? r.lineCount : 0 }),
     },
   ]
 
   return (
-    <Space direction="vertical" size={12} style={{ width: '100%' }}>
-      {/* Filter bar */}
-      <Card size="small" bodyStyle={{ padding: '8px 16px' }}>
-        <Row justify="space-between" align="middle">
-          <Col>
-            <Space>
-              <Text type="secondary">凭证期间:</Text>
-              <Select
-                style={{ width: 140 }}
-                size="small"
-                value={periodRange[0] || currentPeriod?.id}
-                onChange={v => setPeriodRange([v, periodRange[1] || v])}
-                options={periods.map(p => ({ value: p.id, label: p.name }))}
-              />
-              <Text type="secondary">~</Text>
-              <Select
-                style={{ width: 140 }}
-                size="small"
-                value={periodRange[1] || currentPeriod?.id}
-                onChange={v => setPeriodRange([periodRange[0] || v, v])}
-                options={periods.map(p => ({ value: p.id, label: p.name }))}
-              />
-              <Button size="small" icon={<FilterOutlined />}>过滤</Button>
-              <Checkbox checked={showSubtotal} onChange={e => setShowSubtotal(e.target.checked)}>
-                <Text style={{ fontSize: 13 }}>显示凭证金额小计</Text>
-              </Checkbox>
-              <Button size="small" icon={<ReloadOutlined />} onClick={fetchData}>刷新</Button>
-            </Space>
-          </Col>
-          <Col>
-            <Input
-              size="small"
-              placeholder="搜索凭证号/摘要"
-              style={{ width: 180 }}
-              allowClear
-              onChange={e => setFilters(f => ({ ...f, keyword: e.target.value, page: 1 }))}
-            />
-          </Col>
-        </Row>
-      </Card>
+    <div style={{ background: '#fff', minHeight: '100%', margin: '-24px', display: 'flex', flexDirection: 'column' }}>
+      <VoucherTabBar />
 
-      {/* Action bar */}
-      <Row justify="space-between" align="middle">
-        <Col>
-          <Space>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/vouchers/new')}>新增</Button>
-            <Dropdown menu={{ items: [
-              { key: 'approve', label: '批量审核' },
-              { key: 'unapprove', label: '取消审核' },
-            ] }}>
-              <Button icon={<CheckOutlined />}>审核</Button>
-            </Dropdown>
-            <Dropdown menu={{ items: [{ key: 'print', label: '打印凭证' }] }}>
-              <Button icon={<PrinterOutlined />}>打印</Button>
-            </Dropdown>
-            <Button icon={<ImportOutlined />}>导入</Button>
-            <Dropdown menu={{ items: [{ key: 'excel', label: '导出Excel' }, { key: 'pdf', label: '导出PDF' }] }}>
-              <Button icon={<ExportOutlined />}>导出</Button>
-            </Dropdown>
-            {selected.length > 0 && (
-              <Popconfirm title={`确认删除 ${selected.length} 张凭证？`} onConfirm={async () => {
-                for (const id of selected) { try { await api.deleteVoucher(id) } catch { /* skip */ } }
-                setSelected([])
-                fetchData()
-              }}>
-                <Button danger icon={<DeleteOutlined />}>删除 ({selected.length})</Button>
-              </Popconfirm>
-            )}
-          </Space>
-        </Col>
-        <Col>
-          <Select
-            size="small"
-            placeholder="状态筛选"
-            style={{ width: 120 }}
-            allowClear
-            onChange={v => setFilters(f => ({ ...f, status: v ?? '', page: 1 }))}
-            options={Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l }))}
-          />
-        </Col>
-      </Row>
+      {/* Combined filter + action bar */}
+      <div style={{ padding: '8px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <Space wrap>
+          <Dropdown
+            menu={{ items: periods.map(p => ({ key: p.id, label: p.name })) }}
+            trigger={['click']}
+          >
+            <Button size="small">凭证期间 ▾</Button>
+          </Dropdown>
+          <Text type="secondary" style={{ fontSize: 13 }}>
+            {currentPeriodLabel} ~ {currentPeriodLabel}
+          </Text>
+          <Button size="small" icon={<FilterOutlined />}>过滤</Button>
+          <Checkbox checked={showSubtotal} onChange={e => setShowSubtotal(e.target.checked)}>
+            <Text style={{ fontSize: 13 }}>显示凭证金额小计</Text>
+          </Checkbox>
+          <Button size="small" icon={<ReloadOutlined />} onClick={fetchData}>刷新</Button>
+        </Space>
+
+        <Space wrap>
+          <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => navigate('/vouchers/new')}>新增</Button>
+          <Dropdown menu={{ items: [{ key: 'approve', label: '批量审核' }, { key: 'unapprove', label: '取消审核' }] }}>
+            <Button size="small">审核</Button>
+          </Dropdown>
+          <Dropdown menu={{ items: [{ key: 'print', label: '打印凭证' }] }}>
+            <Button size="small">打印</Button>
+          </Dropdown>
+          <Button size="small" icon={<ImportOutlined />}>导入</Button>
+          <Dropdown menu={{ items: [{ key: 'excel', label: '导出Excel' }, { key: 'pdf', label: '导出PDF' }] }}>
+            <Button size="small">导出</Button>
+          </Dropdown>
+          {selected.length > 0 && (
+            <Popconfirm title={`确认删除 ${selected.length} 张凭证？`} onConfirm={async () => {
+              for (const sid of selected) { try { await api.deleteVoucher(sid) } catch { /* skip */ } }
+              setSelected([])
+              fetchData()
+            }}>
+              <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
+            </Popconfirm>
+          )}
+          <Dropdown menu={{ items: [
+            { key: 'batch-post', label: '批量记账' },
+            { key: 'batch-delete', label: '批量删除' },
+            { key: 'sort', label: '凭证整理' },
+          ] }}>
+            <Button size="small">更多</Button>
+          </Dropdown>
+        </Space>
+      </div>
 
       {/* Table */}
-      <Table
-        rowKey="key"
-        columns={columns}
-        dataSource={flatRows}
-        loading={loading}
-        size="small"
-        scroll={{ x: 1400 }}
-        bordered
-        rowSelection={{
-          selectedRowKeys: selected,
-          onChange: keys => setSelected(keys as string[]),
-          getCheckboxProps: r => ({ disabled: r.lineIndex > 0 }),
-        }}
-        pagination={{
-          current: filters.page,
-          pageSize: filters.pageSize,
-          total,
-          showSizeChanger: true,
-          showTotal: t => `共 ${t} 条凭证`,
-          onChange: (p, ps) => setFilters(f => ({ ...f, page: p, pageSize: ps })),
-        }}
-        summary={() => (
-          <Table.Summary fixed>
-            <Table.Summary.Row style={{ background: '#f6ffed' }}>
-              <Table.Summary.Cell index={0} colSpan={6}>
-                <Text strong style={{ color: '#52c41a' }}>合计</Text>
-              </Table.Summary.Cell>
-              <Table.Summary.Cell index={6} align="right">
-                <Text strong style={{ color: '#d4380d' }}>{fmtAmount(totalDebit)}</Text>
-              </Table.Summary.Cell>
-              <Table.Summary.Cell index={7} align="right">
-                <Text strong style={{ color: '#389e0d' }}>{fmtAmount(totalCredit)}</Text>
-              </Table.Summary.Cell>
-              <Table.Summary.Cell index={8} colSpan={3} />
-            </Table.Summary.Row>
-          </Table.Summary>
-        )}
-      />
-    </Space>
+      <div style={{ flex: 1, padding: '0 16px' }}>
+        <Table
+          rowKey="key"
+          columns={columns}
+          dataSource={flatRows}
+          loading={loading}
+          size="small"
+          scroll={{ x: 1100 }}
+          bordered
+          rowSelection={{
+            selectedRowKeys: selected,
+            onChange: keys => setSelected(keys as string[]),
+            getCheckboxProps: r => ({ disabled: r.lineIndex > 0 }),
+          }}
+          pagination={{
+            current: filters.page,
+            pageSize: filters.pageSize,
+            total,
+            showSizeChanger: true,
+            showTotal: t => `共 ${t} 条凭证`,
+            onChange: (p, ps) => setFilters(f => ({ ...f, page: p, pageSize: ps })),
+          }}
+          summary={() => (
+            <Table.Summary fixed>
+              <Table.Summary.Row style={{ background: '#f6ffed' }}>
+                <Table.Summary.Cell index={0} colSpan={6}>
+                  <Text strong>合计</Text>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={6} align="right">
+                  <Text strong>{fmtAmount(totalDebit)}</Text>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={7} align="right">
+                  <Text strong>{fmtAmount(totalCredit)}</Text>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={8} />
+              </Table.Summary.Row>
+            </Table.Summary>
+          )}
+        />
+      </div>
+    </div>
   )
 }

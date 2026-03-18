@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react'
-import { Layout, Table, Button, Space, Typography, DatePicker, Select, Input, Tabs, Tree, Empty, Popconfirm, message, Card, Row, Col, Modal } from 'antd'
+import { Layout, Table, Button, Space, Typography, DatePicker, Select, Input, Tabs, Tree, Empty, Popconfirm, message, Modal, Dropdown } from 'antd'
 import {
   ImportOutlined, LinkOutlined, SettingOutlined, CheckOutlined,
   DownloadOutlined, PrinterOutlined, ExportOutlined, DeleteOutlined,
   MoreOutlined, PlusOutlined, FolderOutlined, FileOutlined,
-  FilterOutlined, LeftOutlined, RightOutlined,
+  FilterOutlined, ReloadOutlined, SearchOutlined,
+  DoubleLeftOutlined, DoubleRightOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { api, type AttachmentItem, type AttachmentCategory } from '@/api/client'
 import { usePeriodStore } from '@/stores/periodStore'
+import VoucherTabBar from './VoucherTabBar'
 
 const { Sider, Content } = Layout
-const { Text, Title } = Typography
+const { Text } = Typography
 const { RangePicker } = DatePicker
 
 interface TreeNode {
@@ -42,14 +44,12 @@ function buildCategoryTree(categories: AttachmentCategory[]): TreeNode[] {
     })
   }
 
-  return [
-    {
-      title: '全部',
-      key: 'all',
-      icon: <FolderOutlined style={{ color: '#1677ff' }} />,
-      children: build(null),
-    },
-  ]
+  return [{
+    title: '全部',
+    key: 'all',
+    icon: <FolderOutlined style={{ color: '#1677ff' }} />,
+    children: build(null),
+  }]
 }
 
 export default function AttachmentManagePage() {
@@ -65,16 +65,15 @@ export default function AttachmentManagePage() {
   const [activeTab, setActiveTab] = useState('category')
   const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [nameFilter, setNameFilter] = useState('')
+  const [categorySearch, setCategorySearch] = useState('')
   const [newCategoryName, setNewCategoryName] = useState('')
   const [showNewCategory, setShowNewCategory] = useState(false)
   const [filters, setFilters] = useState({ page: 1, pageSize: 20 })
 
-  // Load categories
   useEffect(() => {
     api.listAttachmentCategories().then(r => setCategories(r.data.data))
   }, [])
 
-  // Load attachments
   const fetchData = async () => {
     setLoading(true)
     try {
@@ -121,11 +120,9 @@ export default function AttachmentManagePage() {
     {
       title: '操作', width: 60,
       render: (_, r) => (
-        <Space size={2}>
-          <Popconfirm title="确认删除？" onConfirm={async () => { await api.deleteAttachment(r.id); fetchData() }}>
-            <Button size="small" type="text" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
-        </Space>
+        <Popconfirm title="确认删除？" onConfirm={async () => { await api.deleteAttachment(r.id); fetchData() }}>
+          <Button size="small" type="text" danger icon={<DeleteOutlined />} />
+        </Popconfirm>
       ),
     },
     { title: '附件名称', dataIndex: 'name', sorter: true, ellipsis: true },
@@ -142,59 +139,77 @@ export default function AttachmentManagePage() {
       render: (v: number) => v > 0 ? (v / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '—',
     },
     { title: '凭证模板', width: 100, render: () => '—' },
-    { title: '附件所属期间', dataIndex: 'periodId', width: 130, render: (v: string) => {
-      const p = periods.find(p => p.id === v)
-      return p?.name || v || '—'
-    }},
+    { title: '附件所属组', width: 120, render: () => '—' },
+    {
+      title: '是否识别', width: 90, align: 'center',
+      render: () => '—',
+    },
   ]
 
   return (
-    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+    <div style={{ background: '#fff', minHeight: '100%', margin: '-24px', display: 'flex', flexDirection: 'column' }}>
+      <VoucherTabBar />
+
       {/* Filter bar */}
-      <Card size="small" bodyStyle={{ padding: '8px 16px' }}>
-        <Row gutter={12} align="middle">
-          <Col>
-            <Space>
-              <Text type="secondary">上传日期:</Text>
-              <RangePicker size="small" />
-              <Button size="small" icon={<FilterOutlined />}>过滤</Button>
-            </Space>
-          </Col>
-          <Col>
-            <Space>
-              <Text type="secondary">附件名称:</Text>
-              <Input
-                size="small"
-                placeholder="搜索附件名称"
-                style={{ width: 160 }}
-                allowClear
-                value={nameFilter}
-                onChange={e => setNameFilter(e.target.value)}
-              />
-            </Space>
-          </Col>
-        </Row>
-      </Card>
+      <div style={{ padding: '8px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <Space>
+          <Dropdown menu={{ items: [{ key: 'upload', label: '上传日期' }, { key: 'period', label: '记账期间' }] }}>
+            <Button size="small">上传日期 ▾</Button>
+          </Dropdown>
+          <RangePicker size="small" />
+          <Button size="small" icon={<FilterOutlined />}>过滤</Button>
+        </Space>
+        <Space>
+          <Select
+            size="small"
+            defaultValue="name"
+            style={{ width: 100 }}
+            options={[{ value: 'name', label: '附件名称' }]}
+          />
+          <Input
+            size="small"
+            placeholder="附件名称"
+            style={{ width: 160 }}
+            allowClear
+            value={nameFilter}
+            onChange={e => setNameFilter(e.target.value)}
+            suffix={<SearchOutlined style={{ color: '#999' }} />}
+          />
+          <Button size="small" icon={<ReloadOutlined />} onClick={fetchData}>刷新</Button>
+        </Space>
+      </div>
 
       {/* Action bar */}
-      <Space wrap>
-        <Button type="primary" icon={<ImportOutlined />}>导入</Button>
-        <Button icon={<LinkOutlined />}>关联凭证</Button>
-        <Button icon={<SettingOutlined />}>分组设置</Button>
-        <Button icon={<CheckOutlined />}>审核</Button>
-        <Button icon={<DownloadOutlined />}>下载</Button>
-        <Button icon={<PrinterOutlined />}>打印</Button>
-        <Button icon={<ExportOutlined />}>导出</Button>
-        {selected.length > 0 && (
-          <Popconfirm title={`确认删除 ${selected.length} 个附件？`} onConfirm={handleDelete}>
-            <Button danger icon={<DeleteOutlined />}>删除 ({selected.length})</Button>
-          </Popconfirm>
-        )}
-        <Button icon={<MoreOutlined />}>更多</Button>
-      </Space>
+      <div style={{ padding: '8px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <Space wrap>
+          <Dropdown menu={{ items: [{ key: 'local', label: '本地上传' }, { key: 'scan', label: '扫描导入' }] }}>
+            <Button type="primary" size="small" icon={<ImportOutlined />}>导入</Button>
+          </Dropdown>
+          <Button size="small" icon={<LinkOutlined />}>关联凭证</Button>
+          <Button size="small" icon={<SettingOutlined />}>分组设置</Button>
+          <Dropdown menu={{ items: [{ key: 'approve', label: '批量审核' }, { key: 'unapprove', label: '取消审核' }] }}>
+            <Button size="small">审核</Button>
+          </Dropdown>
+          <Button size="small" icon={<DownloadOutlined />}>下载</Button>
+          <Dropdown menu={{ items: [{ key: 'print', label: '打印' }] }}>
+            <Button size="small" icon={<PrinterOutlined />}>打印</Button>
+          </Dropdown>
+          <Button size="small" icon={<ExportOutlined />}>导出</Button>
+          {selected.length > 0 && (
+            <Popconfirm title={`确认删除 ${selected.length} 个附件？`} onConfirm={handleDelete}>
+              <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
+            </Popconfirm>
+          )}
+          <Dropdown menu={{ items: [{ key: 'merge', label: '合并附件' }, { key: 'split', label: '拆分附件' }] }}>
+            <Button size="small">更多</Button>
+          </Dropdown>
+          <Button size="small">附件小类</Button>
+          <Button type="primary" size="small" style={{ fontWeight: 500 }}>生成凭证</Button>
+        </Space>
+      </div>
 
       {/* Main content: left panel + right table */}
-      <Layout style={{ background: '#fff', border: '1px solid #f0f0f0', borderRadius: 6, minHeight: 500 }}>
+      <Layout style={{ background: '#fff', borderTop: '1px solid #f0f0f0', flex: 1 }}>
         <Sider
           width={220}
           collapsedWidth={0}
@@ -214,6 +229,14 @@ export default function AttachmentManagePage() {
             />
             {activeTab === 'category' && (
               <>
+                <Input
+                  size="small"
+                  placeholder="请输入名称"
+                  prefix={<SearchOutlined style={{ color: '#999' }} />}
+                  value={categorySearch}
+                  onChange={e => setCategorySearch(e.target.value)}
+                  style={{ marginBottom: 8 }}
+                />
                 <Tree
                   showIcon
                   treeData={treeData}
@@ -239,9 +262,7 @@ export default function AttachmentManagePage() {
                   <div
                     key={p.id}
                     style={{
-                      padding: '4px 8px',
-                      cursor: 'pointer',
-                      borderRadius: 4,
+                      padding: '4px 8px', cursor: 'pointer', borderRadius: 4,
                       background: selectedCategory === p.id ? '#e6f4ff' : 'transparent',
                     }}
                     onClick={() => setSelectedCategory(p.id)}
@@ -253,13 +274,17 @@ export default function AttachmentManagePage() {
             )}
           </div>
           {/* Collapse toggle */}
-          <Button
-            type="text"
-            size="small"
-            icon={collapsed ? <RightOutlined /> : <LeftOutlined />}
+          <div
             onClick={() => setCollapsed(!collapsed)}
-            style={{ position: 'absolute', top: '50%', right: -16, transform: 'translateY(-50%)', zIndex: 10 }}
-          />
+            style={{
+              position: 'absolute', top: '50%', right: -14, transform: 'translateY(-50%)',
+              cursor: 'pointer', zIndex: 10, color: '#999', background: '#fff',
+              border: '1px solid #e8e8e8', borderRadius: 2, padding: '4px 2px',
+              display: 'flex', alignItems: 'center',
+            }}
+          >
+            {collapsed ? <DoubleRightOutlined style={{ fontSize: 10 }} /> : <DoubleLeftOutlined style={{ fontSize: 10 }} />}
+          </div>
         </Sider>
 
         <Content style={{ padding: 12 }}>
@@ -269,7 +294,7 @@ export default function AttachmentManagePage() {
             dataSource={attachments}
             loading={loading}
             size="small"
-            scroll={{ x: 900 }}
+            scroll={{ x: 1000 }}
             rowSelection={{
               selectedRowKeys: selected,
               onChange: keys => setSelected(keys as string[]),
@@ -304,6 +329,6 @@ export default function AttachmentManagePage() {
           onPressEnter={handleAddCategory}
         />
       </Modal>
-    </Space>
+    </div>
   )
 }
