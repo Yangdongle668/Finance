@@ -17,6 +17,7 @@ import reportRoutes from './api/routes/reports'
 import periodRoutes from './api/routes/periods'
 import assetRoutes from './api/routes/assets'
 import invoiceRoutes from './api/routes/invoices'
+import attachmentRoutes from './api/routes/attachments'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -50,6 +51,7 @@ app.use('/api/reports', reportRoutes)
 app.use('/api/periods', periodRoutes)
 app.use('/api/assets', assetRoutes)
 app.use('/api/invoices', invoiceRoutes)
+app.use('/api/attachments', attachmentRoutes)
 
 // ── Error handling ────────────────────────────────────────
 app.use(notFound)

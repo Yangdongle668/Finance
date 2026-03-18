@@ -8,9 +8,9 @@ const svc = new VoucherService()
 
 router.use(authenticate)
 
-// GET /api/vouchers?periodId=&page=&pageSize=&status=&keyword=&accountCode=
+// GET /api/vouchers?periodId=&page=&pageSize=&status=&keyword=&accountCode=&includeLines=
 router.get('/', (req: Request, res: Response) => {
-  const { periodId, page, pageSize, status, keyword, accountCode, startDate, endDate, type } = req.query
+  const { periodId, page, pageSize, status, keyword, accountCode, startDate, endDate, type, voucherWord, includeLines } = req.query
   const result = svc.list({
     periodId: periodId as string,
     page: page ? Number(page) : 1,
@@ -21,8 +21,18 @@ router.get('/', (req: Request, res: Response) => {
     startDate: startDate as string,
     endDate: endDate as string,
     type: type as string as never,
+    voucherWord: voucherWord as string as never,
+    includeLines: includeLines === 'true',
   })
   paginate(res, result.data, result.total, page ? Number(page) : 1, pageSize ? Number(pageSize) : 20)
+})
+
+// GET /api/vouchers/next-no?periodId=&voucherWord=
+router.get('/next-no', (req: Request, res: Response) => {
+  const { periodId, voucherWord } = req.query
+  if (!periodId) { res.status(400).json({ code: 400, message: '缺少 periodId' }); return }
+  const no = svc.getNextVoucherNo(periodId as string, (voucherWord as string) || '记')
+  ok(res, { voucherNo: no })
 })
 
 // GET /api/vouchers/:id
@@ -36,6 +46,18 @@ router.get('/:id', (req: Request, res: Response) => {
 router.post('/', (req: Request, res: Response) => {
   const voucher = svc.create({ ...req.body, preparedBy: req.user!.userId })
   res.status(201).json({ code: 0, message: '凭证创建成功', data: voucher })
+})
+
+// PUT /api/vouchers/:id
+router.put('/:id', (req: Request, res: Response) => {
+  const voucher = svc.update(req.params.id, req.body)
+  ok(res, voucher, '凭证更新成功')
+})
+
+// DELETE /api/vouchers/:id
+router.delete('/:id', (req: Request, res: Response) => {
+  svc.delete(req.params.id)
+  ok(res, null, '凭证删除成功')
 })
 
 // POST /api/vouchers/:id/submit

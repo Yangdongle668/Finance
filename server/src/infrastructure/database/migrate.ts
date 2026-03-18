@@ -10,6 +10,15 @@ export function runMigrations(): void {
 
   // Execute all statements in the schema
   db.exec(sql)
+
+  // Incremental migrations for existing tables
+  const columns = db.prepare("PRAGMA table_info(vouchers)").all() as { name: string }[]
+  const colNames = columns.map(c => c.name)
+  if (!colNames.includes('voucher_word')) {
+    db.exec("ALTER TABLE vouchers ADD COLUMN voucher_word TEXT NOT NULL DEFAULT '记'")
+    logger.info('Migration: added voucher_word column to vouchers')
+  }
+
   logger.info('Database migrations completed')
 }
 

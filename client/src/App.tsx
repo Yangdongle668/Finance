@@ -6,6 +6,8 @@ import DashboardPage from '@/pages/dashboard/DashboardPage'
 import VoucherListPage from '@/pages/voucher/VoucherListPage'
 import VoucherFormPage from '@/pages/voucher/VoucherFormPage'
 import VoucherDetailPage from '@/pages/voucher/VoucherDetailPage'
+import AttachmentManagePage from '@/pages/voucher/AttachmentManagePage'
+import VoucherSummaryPage from '@/pages/voucher/VoucherSummaryPage'
 import TrialBalancePage from '@/pages/ledger/TrialBalancePage'
 import LedgerDetailPage from '@/pages/ledger/LedgerDetailPage'
 import GeneralLedgerPage from '@/pages/ledger/GeneralLedgerPage'
@@ -34,6 +36,9 @@ export default function App() {
           <Route path="vouchers" element={<VoucherListPage />} />
           <Route path="vouchers/new" element={<VoucherFormPage />} />
           <Route path="vouchers/:id" element={<VoucherDetailPage />} />
+          <Route path="vouchers/:id/edit" element={<VoucherFormPage />} />
+          <Route path="vouchers/summary" element={<VoucherSummaryPage />} />
+          <Route path="voucher/attachment-manage" element={<AttachmentManagePage />} />
           {/* 账簿 */}
           <Route path="ledger/trial-balance" element={<TrialBalancePage />} />
           <Route path="ledger/detail" element={<LedgerDetailPage />} />

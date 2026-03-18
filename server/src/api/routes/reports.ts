@@ -40,6 +40,12 @@ router.get('/cash-flow/:periodId', (req: Request, res: Response) => {
   ok(res, svc.cashFlowStatement(req.params.periodId))
 })
 
+// GET /api/reports/voucher-summary/:periodId?startDate=&endDate=
+router.get('/voucher-summary/:periodId', (req: Request, res: Response) => {
+  const { startDate, endDate } = req.query
+  ok(res, svc.voucherSummary(req.params.periodId, startDate as string | undefined, endDate as string | undefined))
+})
+
 // GET /api/reports/dashboard/:periodId
 router.get('/dashboard/:periodId', (req: Request, res: Response) => {
   ok(res, svc.dashboard(req.params.periodId))

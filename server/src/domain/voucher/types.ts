@@ -1,3 +1,6 @@
+/** 凭证字 */
+export type VoucherWord = '记' | '收' | '付' | '转'
+
 /** 凭证状态 */
 export type VoucherStatus = 'draft' | 'pending' | 'approved' | 'posted' | 'reversed'
 
@@ -27,7 +30,8 @@ export interface VoucherLine {
 /** 凭证主表 */
 export interface Voucher {
   id: string
-  voucherNo: string       // 凭证号（格式：记-2024-001）
+  voucherNo: string       // 凭证号（格式：记-1）
+  voucherWord: VoucherWord // 凭证字（记/收/付/转）
   voucherDate: string     // 凭证日期（YYYY-MM-DD）
   periodId: string        // 所属期间
   summary: string         // 摘要
@@ -54,6 +58,41 @@ export interface VoucherFilter {
   accountCode?: string
   keyword?: string        // 凭证号 or 摘要
   type?: VoucherType
+  voucherWord?: VoucherWord
+  includeLines?: boolean  // 是否包含凭证行明细
+  page?: number
+  pageSize?: number
+}
+
+/** 附件分类 */
+export interface AttachmentCategory {
+  id: string
+  name: string
+  parentId: string | null
+  sortOrder: number
+}
+
+/** 附件 */
+export interface Attachment {
+  id: string
+  name: string
+  remark: string | null
+  categoryId: string | null
+  amount: number          // 金额（分）
+  periodId: string | null
+  voucherId: string | null
+  uploadDate: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** 附件过滤条件 */
+export interface AttachmentFilter {
+  categoryId?: string
+  periodId?: string
+  name?: string
+  startDate?: string
+  endDate?: string
   page?: number
   pageSize?: number
 }

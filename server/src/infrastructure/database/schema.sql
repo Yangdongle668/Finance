@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS dimensions (
 CREATE TABLE IF NOT EXISTS vouchers (
   id                TEXT PRIMARY KEY,
   voucher_no        TEXT NOT NULL,
+  voucher_word      TEXT NOT NULL DEFAULT '记',  -- 凭证字：记|收|付|转
   voucher_date      TEXT NOT NULL,
   period_id         TEXT NOT NULL REFERENCES periods(id),
   summary           TEXT NOT NULL,
@@ -311,3 +312,33 @@ CREATE TABLE IF NOT EXISTS payroll_items (
   other_deductions  INTEGER NOT NULL DEFAULT 0,
   net_salary        INTEGER NOT NULL DEFAULT 0
 );
+
+-- ── 附件分类 ──────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS attachment_categories (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  parent_id   TEXT,
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);
+
+-- ── 原始凭证附件 ──────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS attachments (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  remark      TEXT,
+  category_id TEXT REFERENCES attachment_categories(id),
+  amount      INTEGER NOT NULL DEFAULT 0,  -- 金额（分）
+  period_id   TEXT REFERENCES periods(id),
+  voucher_id  TEXT REFERENCES vouchers(id),
+  upload_date TEXT NOT NULL,
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_attachments_category ON attachments(category_id);
+CREATE INDEX IF NOT EXISTS idx_attachments_period   ON attachments(period_id);
+CREATE INDEX IF NOT EXISTS idx_attachments_voucher  ON attachments(voucher_id);

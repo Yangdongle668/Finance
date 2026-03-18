@@ -2,12 +2,13 @@ import { v4 as uuid } from 'uuid'
 import { VoucherRepository } from '../../infrastructure/repositories/VoucherRepository'
 import { AccountRepository } from '../../infrastructure/repositories/AccountRepository'
 import { PeriodRepository } from '../../infrastructure/repositories/PeriodRepository'
-import type { Voucher, VoucherLine, VoucherFilter } from '../../domain/voucher/types'
+import type { Voucher, VoucherLine, VoucherFilter, VoucherWord } from '../../domain/voucher/types'
 
 export interface CreateVoucherDTO {
   voucherDate: string
   periodId: string
   summary: string
+  voucherWord?: VoucherWord
   type?: Voucher['type']
   attachmentCount?: number
   attachmentDesc?: string
@@ -16,12 +17,22 @@ export interface CreateVoucherDTO {
     accountCode: string
     direction: 'debit' | 'credit'
     amount: number           // 元（前端传入），内部转换为分
+    summary?: string         // 每行摘要
     departmentId?: string
     projectId?: string
     customerId?: string
     supplierId?: string
     remark?: string
   }[]
+}
+
+export interface UpdateVoucherDTO {
+  voucherDate?: string
+  summary?: string
+  voucherWord?: VoucherWord
+  attachmentCount?: number
+  attachmentDesc?: string
+  lines?: CreateVoucherDTO['lines']
 }
 
 export class VoucherService {
@@ -60,7 +71,8 @@ export class VoucherService {
 
     // 4. 构建凭证
     const voucherId = uuid()
-    const voucherNo = this.repo.nextVoucherNo(dto.periodId)
+    const word = dto.voucherWord ?? '记'
+    const voucherNo = this.repo.nextVoucherNo(dto.periodId, word)
     const lines: VoucherLine[] = dto.lines.map((l, i) => {
       const account = this.accountRepo.findByCode(l.accountCode)!
       return {
@@ -75,13 +87,14 @@ export class VoucherService {
         projectId: l.projectId ?? null,
         customerId: l.customerId ?? null,
         supplierId: l.supplierId ?? null,
-        remark: l.remark ?? null,
+        remark: l.remark ?? l.summary ?? null,
       }
     })
 
     const voucher: Voucher = {
       id: voucherId,
       voucherNo,
+      voucherWord: word,
       voucherDate: dto.voucherDate,
       periodId: dto.periodId,
       summary: dto.summary,
@@ -101,6 +114,66 @@ export class VoucherService {
 
     this.repo.create(voucher)
     return voucher
+  }
+
+  update(id: string, dto: UpdateVoucherDTO): Voucher {
+    const v = this.assertExists(id)
+    if (v.status !== 'draft') throw new Error('只有草稿凭证才能编辑')
+
+    // Validate lines if provided
+    if (dto.lines) {
+      for (const line of dto.lines) {
+        const account = this.accountRepo.findByCode(line.accountCode)
+        if (!account) throw new Error(`科目 ${line.accountCode} 不存在`)
+        if (!account.isEnabled) throw new Error(`科目 ${line.accountCode} 已禁用`)
+        if (!account.isLeaf) throw new Error(`科目 ${line.accountCode} 不是末级科目，不能直接挂凭证`)
+      }
+
+      const totalDebit = dto.lines.filter(l => l.direction === 'debit').reduce((s, l) => s + l.amount, 0)
+      const totalCredit = dto.lines.filter(l => l.direction === 'credit').reduce((s, l) => s + l.amount, 0)
+      if (Math.abs(totalDebit - totalCredit) > 0.001) {
+        throw new Error(`借贷不平衡：借方合计 ${totalDebit}，贷方合计 ${totalCredit}`)
+      }
+    }
+
+    const updated: Voucher = {
+      ...v,
+      voucherWord: dto.voucherWord ?? v.voucherWord,
+      voucherDate: dto.voucherDate ?? v.voucherDate,
+      summary: dto.summary ?? v.summary,
+      attachmentCount: dto.attachmentCount ?? v.attachmentCount,
+      attachmentDesc: dto.attachmentDesc ?? v.attachmentDesc,
+      updatedAt: new Date().toISOString(),
+    }
+
+    if (dto.lines) {
+      updated.lines = dto.lines.map((l, i) => {
+        const account = this.accountRepo.findByCode(l.accountCode)!
+        return {
+          id: uuid(),
+          voucherId: id,
+          lineNo: i + 1,
+          accountCode: l.accountCode,
+          accountName: account.name,
+          direction: l.direction,
+          amount: Math.round(l.amount * 100),
+          departmentId: l.departmentId ?? null,
+          projectId: l.projectId ?? null,
+          customerId: l.customerId ?? null,
+          supplierId: l.supplierId ?? null,
+          remark: l.remark ?? l.summary ?? null,
+        }
+      })
+    }
+
+    this.repo.update(updated)
+    return updated
+  }
+
+  delete(id: string): void {
+    const v = this.assertExists(id)
+    if (v.status !== 'draft') throw new Error('只有草稿凭证才能删除')
+    this.repo.delete(id)
   }
 
   submit(id: string): void {
@@ -149,7 +222,8 @@ export class VoucherService {
     if (original.status !== 'posted') throw new Error('只能反向已记账的凭证')
 
     const voucherId = uuid()
-    const voucherNo = this.repo.nextVoucherNo(original.periodId)
+    const word = original.voucherWord ?? '记'
+    const voucherNo = this.repo.nextVoucherNo(original.periodId, word)
     const lines: VoucherLine[] = (original.lines ?? []).map(l => ({
       ...l,
       id: uuid(),
@@ -160,6 +234,7 @@ export class VoucherService {
     const reversal: Voucher = {
       id: voucherId,
       voucherNo,
+      voucherWord: word,
       voucherDate: new Date().toISOString().slice(0, 10),
       periodId: original.periodId,
       summary: `红字冲销 ${original.voucherNo}：${original.summary}`,
@@ -180,6 +255,11 @@ export class VoucherService {
     this.repo.create(reversal)
     this.repo.updateStatus(id, 'reversed', userId)
     return reversal
+  }
+
+  /** 获取下一个凭证号 */
+  getNextVoucherNo(periodId: string, voucherWord: string = '记'): string {
+    return this.repo.nextVoucherNo(periodId, voucherWord)
   }
 
   private assertExists(id: string): Voucher {

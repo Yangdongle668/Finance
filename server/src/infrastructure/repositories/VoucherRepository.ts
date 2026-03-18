@@ -23,6 +23,7 @@ function rowToVoucher(r: Record<string, unknown>, lines?: VoucherLine[]): Vouche
   return {
     id: r.id as string,
     voucherNo: r.voucher_no as string,
+    voucherWord: (r.voucher_word as Voucher['voucherWord']) ?? '记',
     voucherDate: r.voucher_date as string,
     periodId: r.period_id as string,
     summary: r.summary as string,
@@ -60,6 +61,7 @@ export class VoucherRepository {
     if (filter.endDate) { conditions.push('v.voucher_date<=?'); params.push(filter.endDate) }
     if (filter.status) { conditions.push('v.status=?'); params.push(filter.status) }
     if (filter.type) { conditions.push('v.type=?'); params.push(filter.type) }
+    if (filter.voucherWord) { conditions.push('v.voucher_word=?'); params.push(filter.voucherWord) }
     if (filter.keyword) {
       conditions.push('(v.voucher_no LIKE ? OR v.summary LIKE ?)')
       params.push(`%${filter.keyword}%`, `%${filter.keyword}%`)
@@ -80,7 +82,13 @@ export class VoucherRepository {
       `SELECT * FROM vouchers v ${where} ORDER BY v.voucher_date DESC, v.voucher_no DESC LIMIT ? OFFSET ?`
     ).all(...params, pageSize, offset) as Record<string, unknown>[]
 
-    const data = rows.map(r => rowToVoucher(r))
+    const data = rows.map(r => {
+      if (filter.includeLines) {
+        const lines = (db.prepare('SELECT * FROM voucher_lines WHERE voucher_id=? ORDER BY line_no').all(r.id as string) as Record<string, unknown>[]).map(rowToLine)
+        return rowToVoucher(r, lines)
+      }
+      return rowToVoucher(r)
+    })
     return { data, total }
   }
 
@@ -89,13 +97,13 @@ export class VoucherRepository {
       const now = dayjs().toISOString()
       db.prepare(`
         INSERT INTO vouchers
-          (id,voucher_no,voucher_date,period_id,summary,type,status,attachment_count,
-           attachment_desc,prepared_by,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+          (id,voucher_no,voucher_word,voucher_date,period_id,summary,type,status,attachment_count,
+           attachment_desc,prepared_by,reverse_voucher_id,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).run(
-        voucher.id, voucher.voucherNo, voucher.voucherDate, voucher.periodId,
+        voucher.id, voucher.voucherNo, voucher.voucherWord ?? '记', voucher.voucherDate, voucher.periodId,
         voucher.summary, voucher.type, voucher.status, voucher.attachmentCount,
-        voucher.attachmentDesc, voucher.preparedBy, now, now
+        voucher.attachmentDesc, voucher.preparedBy, voucher.reverseVoucherId, now, now
       )
 
       const insertLine = db.prepare(`
@@ -114,6 +122,44 @@ export class VoucherRepository {
     })
   }
 
+  update(voucher: Voucher): void {
+    withTransaction(db => {
+      const now = dayjs().toISOString()
+      db.prepare(`
+        UPDATE vouchers SET
+          voucher_word=?, voucher_date=?, summary=?, attachment_count=?,
+          attachment_desc=?, updated_at=?
+        WHERE id=?
+      `).run(
+        voucher.voucherWord ?? '记', voucher.voucherDate, voucher.summary,
+        voucher.attachmentCount, voucher.attachmentDesc, now, voucher.id
+      )
+
+      // Replace all lines
+      db.prepare('DELETE FROM voucher_lines WHERE voucher_id=?').run(voucher.id)
+      const insertLine = db.prepare(`
+        INSERT INTO voucher_lines
+          (id,voucher_id,line_no,account_code,account_name,direction,amount,
+           department_id,project_id,customer_id,supplier_id,remark)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+      `)
+      for (const line of voucher.lines ?? []) {
+        insertLine.run(
+          line.id, voucher.id, line.lineNo, line.accountCode, line.accountName,
+          line.direction, line.amount, line.departmentId, line.projectId,
+          line.customerId, line.supplierId, line.remark
+        )
+      }
+    })
+  }
+
+  delete(id: string): void {
+    withTransaction(db => {
+      db.prepare('DELETE FROM voucher_lines WHERE voucher_id=?').run(id)
+      db.prepare('DELETE FROM vouchers WHERE id=?').run(id)
+    })
+  }
+
   updateStatus(id: string, status: Voucher['status'], userId: string): void {
     const db = getDb()
     const now = dayjs().toISOString()
@@ -127,19 +173,19 @@ export class VoucherRepository {
     db.prepare(`UPDATE vouchers SET status=?${field}, updated_at=? WHERE id=?`).run(...params)
   }
 
-  /** 生成凭证号（记-YYYY-NNN） */
-  nextVoucherNo(periodId: string): string {
+  /** 生成凭证号序号 */
+  nextVoucherSeq(periodId: string, voucherWord: string): number {
     const db = getDb()
     const result = db.prepare(
-      "SELECT voucher_no FROM vouchers WHERE period_id=? ORDER BY voucher_no DESC LIMIT 1"
-    ).get(periodId) as { voucher_no: string } | undefined
-    if (!result) {
-      const period = db.prepare('SELECT year, month FROM periods WHERE id=?').get(periodId) as { year: number; month: number }
-      return `记-${period.year}${String(period.month).padStart(2, '0')}-001`
-    }
-    const parts = result.voucher_no.split('-')
-    const seq = parseInt(parts[parts.length - 1]) + 1
-    return `${parts.slice(0, -1).join('-')}-${String(seq).padStart(3, '0')}`
+      "SELECT COUNT(*) as cnt FROM vouchers WHERE period_id=? AND voucher_word=?"
+    ).get(periodId, voucherWord) as { cnt: number }
+    return result.cnt + 1
+  }
+
+  /** 生成凭证号（如"记-1"） */
+  nextVoucherNo(periodId: string, voucherWord = '记'): string {
+    const seq = this.nextVoucherSeq(periodId, voucherWord)
+    return `${voucherWord}-${seq}`
   }
 
   /** 更新科目余额（记账时调用） */

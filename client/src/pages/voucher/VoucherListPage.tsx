@@ -1,122 +1,277 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Table, Button, Space, Tag, Input, Select, DatePicker, Card, Typography, Popconfirm, message, Row, Col } from 'antd'
-import { PlusOutlined, SearchOutlined, CheckOutlined, RetweetOutlined } from '@ant-design/icons'
+import { Table, Button, Space, Select, Typography, Popconfirm, message, Checkbox, Dropdown, Tooltip } from 'antd'
+import {
+  PlusOutlined, FilterOutlined, ReloadOutlined,
+  EditOutlined, DeleteOutlined, MoreOutlined,
+  CheckOutlined, PrinterOutlined, ImportOutlined, ExportOutlined,
+  EyeOutlined,
+} from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import dayjs from 'dayjs'
-import { api, type Voucher } from '@/api/client'
+import { api, type Voucher, type VoucherLine } from '@/api/client'
 import { usePeriodStore } from '@/stores/periodStore'
+import VoucherTabBar from './VoucherTabBar'
 
-const { Title } = Typography
-const { RangePicker } = DatePicker
+const { Text } = Typography
 
-const STATUS_COLORS: Record<string, string> = {
-  draft: 'default', pending: 'processing', approved: 'cyan', posted: 'success', reversed: 'error'
+interface FlatRow {
+  key: string
+  voucherId: string
+  voucherNo: string
+  voucherWord: string
+  voucherDate: string
+  status: string
+  summary: string
+  accountCode: string
+  accountName: string
+  debitAmount: number
+  creditAmount: number
+  attachmentCount: number
+  preparedBy: string
+  reviewedBy: string
+  lineIndex: number
+  lineCount: number
 }
-const STATUS_LABELS: Record<string, string> = {
-  draft: '草稿', pending: '待审核', approved: '已审核', posted: '已记账', reversed: '已冲销'
+
+function flattenVouchers(vouchers: Voucher[]): FlatRow[] {
+  const rows: FlatRow[] = []
+  for (const v of vouchers) {
+    const lines = v.lines ?? []
+    if (lines.length === 0) {
+      rows.push({
+        key: v.id, voucherId: v.id, voucherNo: v.voucherNo,
+        voucherWord: v.voucherWord || '记', voucherDate: v.voucherDate,
+        status: v.status, summary: v.summary, accountCode: '', accountName: '',
+        debitAmount: 0, creditAmount: 0, attachmentCount: v.attachmentCount ?? 0,
+        preparedBy: v.preparedBy, reviewedBy: v.reviewedBy ?? '',
+        lineIndex: 0, lineCount: 1,
+      })
+    } else {
+      lines.forEach((l: VoucherLine, i: number) => {
+        rows.push({
+          key: `${v.id}_${i}`, voucherId: v.id, voucherNo: v.voucherNo,
+          voucherWord: v.voucherWord || '记', voucherDate: v.voucherDate,
+          status: v.status, summary: l.remark || v.summary,
+          accountCode: l.accountCode, accountName: l.accountName,
+          debitAmount: l.direction === 'debit' ? l.amount / 100 : 0,
+          creditAmount: l.direction === 'credit' ? l.amount / 100 : 0,
+          attachmentCount: v.attachmentCount ?? 0,
+          preparedBy: v.preparedBy, reviewedBy: v.reviewedBy ?? '',
+          lineIndex: i, lineCount: lines.length,
+        })
+      })
+    }
+  }
+  return rows
 }
+
+const fmtAmount = (v: number) => v > 0 ? v.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''
 
 export default function VoucherListPage() {
   const navigate = useNavigate()
   const currentPeriod = usePeriodStore(s => s.currentPeriod)
+  const periods = usePeriodStore(s => s.periods)
   const [data, setData] = useState<Voucher[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
+  const [showSubtotal, setShowSubtotal] = useState(false)
   const [filters, setFilters] = useState({ page: 1, pageSize: 20, status: '', keyword: '' })
+  const [periodRange, setPeriodRange] = useState<[string, string]>(['', ''])
 
   const fetchData = async () => {
     if (!currentPeriod) return
     setLoading(true)
-    const res = await api.listVouchers({ ...filters, periodId: currentPeriod.id })
-    setData(res.data.data)
-    setTotal(res.data.total)
-    setLoading(false)
+    try {
+      const startPeriod = periodRange[0] || currentPeriod.id
+      const endPeriod = periodRange[1] || currentPeriod.id
+      const startP = periods.find(p => p.id === startPeriod)
+      const endP = periods.find(p => p.id === endPeriod)
+      const res = await api.listVouchers({
+        ...filters,
+        periodId: currentPeriod.id,
+        startDate: startP?.startDate,
+        endDate: endP?.endDate,
+        includeLines: true,
+      })
+      setData(res.data.data)
+      setTotal(res.data.total)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { fetchData() }, [currentPeriod?.id, filters])
 
-  const handleBatchPost = async () => {
-    const res = await api.batchPostVouchers(selected)
-    message.success(res.data.message)
-    setSelected([])
+  const handleDelete = async (id: string) => {
+    await api.deleteVoucher(id)
+    message.success('凭证已删除')
     fetchData()
   }
 
-  const handleReverse = async (id: string) => {
-    await api.reverseVoucher(id)
-    message.success('反向冲销成功')
-    fetchData()
-  }
+  const flatRows = flattenVouchers(data)
+  const totalDebit = flatRows.reduce((s, r) => s + r.debitAmount, 0)
+  const totalCredit = flatRows.reduce((s, r) => s + r.creditAmount, 0)
 
-  const columns: ColumnsType<Voucher> = [
-    { title: '凭证号', dataIndex: 'voucherNo', width: 160, render: (v, r) => <a onClick={() => navigate(`/vouchers/${r.id}`)}>{v}</a> },
-    { title: '日期', dataIndex: 'voucherDate', width: 110 },
-    { title: '摘要', dataIndex: 'summary', ellipsis: true },
+  const currentPeriodLabel = currentPeriod
+    ? `${currentPeriod.year}年${String(currentPeriod.month).padStart(2, '0')}期`
+    : ''
+
+  const columns: ColumnsType<FlatRow> = [
     {
-      title: '状态', dataIndex: 'status', width: 90,
-      render: v => <Tag color={STATUS_COLORS[v]}>{STATUS_LABELS[v]}</Tag>
+      title: '操作', width: 80, fixed: 'left',
+      render: (_, r) => {
+        if (r.lineIndex > 0) return null
+        return (
+          <Space direction="vertical" size={0} style={{ fontSize: 12 }}>
+            <a onClick={() => navigate(`/vouchers/${r.voucherId}/edit`)} style={{ color: '#1677ff' }}>
+              <EditOutlined />
+            </a>
+            {r.status === 'draft' && (
+              <Popconfirm title="确认删除此凭证？" onConfirm={() => handleDelete(r.voucherId)}>
+                <a style={{ color: '#ff4d4f' }}><DeleteOutlined /></a>
+              </Popconfirm>
+            )}
+            <Dropdown menu={{ items: [
+              { key: 'view', label: '查看详情', onClick: () => navigate(`/vouchers/${r.voucherId}`) },
+              ...(r.status === 'draft' ? [{ key: 'submit', label: '提交审核', onClick: async () => { await api.submitVoucher(r.voucherId); fetchData() } }] : []),
+              ...(r.status === 'pending' ? [{ key: 'approve', label: '审核通过', onClick: async () => { await api.approveVoucher(r.voucherId); fetchData() } }] : []),
+            ] }}>
+              <a><MoreOutlined /></a>
+            </Dropdown>
+          </Space>
+        )
+      },
+      onCell: (r) => ({ rowSpan: r.lineIndex === 0 ? r.lineCount : 0 }),
     },
     {
-      title: '操作', width: 200, fixed: 'right',
+      title: '日期', dataIndex: 'voucherDate', width: 110, sorter: true,
+      onCell: (r) => ({ rowSpan: r.lineIndex === 0 ? r.lineCount : 0 }),
+    },
+    {
+      title: '凭证字号', width: 100, sorter: true,
       render: (_, r) => (
-        <Space size={4}>
-          {r.status === 'draft' && <Button size="small" type="link" onClick={async () => { await api.submitVoucher(r.id); fetchData() }}>提交</Button>}
-          {r.status === 'pending' && <Button size="small" type="link" onClick={async () => { await api.approveVoucher(r.id); fetchData() }}>审核</Button>}
-          {r.status === 'approved' && <Button size="small" type="link" onClick={async () => { await api.postVoucher(r.id); fetchData() }}>记账</Button>}
-          {r.status === 'posted' && (
-            <Popconfirm title="确认红字冲销此凭证？" onConfirm={() => handleReverse(r.id)}>
-              <Button size="small" type="link" danger><RetweetOutlined />冲销</Button>
-            </Popconfirm>
-          )}
-          <Button size="small" type="link" onClick={() => navigate(`/vouchers/${r.id}`)}>查看</Button>
-        </Space>
-      )
+        <a onClick={() => navigate(`/vouchers/${r.voucherId}`)} style={{ color: '#1677ff' }}>
+          {r.voucherNo}
+        </a>
+      ),
+      onCell: (r) => ({ rowSpan: r.lineIndex === 0 ? r.lineCount : 0 }),
+    },
+    { title: '摘要', dataIndex: 'summary', ellipsis: true },
+    {
+      title: '科目', ellipsis: true,
+      render: (_, r) => r.accountCode ? `${r.accountCode} ${r.accountName}` : '',
+    },
+    {
+      title: '借方金额', dataIndex: 'debitAmount', width: 130, align: 'right',
+      render: (v: number) => <Text>{fmtAmount(v)}</Text>,
+    },
+    {
+      title: '贷方金额', dataIndex: 'creditAmount', width: 130, align: 'right',
+      render: (v: number) => <Text>{fmtAmount(v)}</Text>,
+    },
+    {
+      title: <><EyeOutlined /></>, width: 70, align: 'center',
+      render: (_, r) => r.lineIndex === 0 ? <a style={{ color: '#1677ff', fontSize: 12 }}>上传</a> : null,
+      onCell: (r) => ({ rowSpan: r.lineIndex === 0 ? r.lineCount : 0 }),
     },
   ]
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={4} style={{ margin: 0 }}>凭证管理</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/vouchers/new')}>新增凭证</Button>
+    <div style={{ background: '#fff', minHeight: '100%', margin: '-24px', display: 'flex', flexDirection: 'column' }}>
+      <VoucherTabBar />
+
+      {/* Combined filter + action bar */}
+      <div style={{ padding: '8px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <Space wrap>
+          <Dropdown
+            menu={{ items: periods.map(p => ({ key: p.id, label: p.name })) }}
+            trigger={['click']}
+          >
+            <Button size="small">凭证期间 ▾</Button>
+          </Dropdown>
+          <Text type="secondary" style={{ fontSize: 13 }}>
+            {currentPeriodLabel} ~ {currentPeriodLabel}
+          </Text>
+          <Button size="small" icon={<FilterOutlined />}>过滤</Button>
+          <Checkbox checked={showSubtotal} onChange={e => setShowSubtotal(e.target.checked)}>
+            <Text style={{ fontSize: 13 }}>显示凭证金额小计</Text>
+          </Checkbox>
+          <Button size="small" icon={<ReloadOutlined />} onClick={fetchData}>刷新</Button>
+        </Space>
+
+        <Space wrap>
+          <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => navigate('/vouchers/new')}>新增</Button>
+          <Dropdown menu={{ items: [{ key: 'approve', label: '批量审核' }, { key: 'unapprove', label: '取消审核' }] }}>
+            <Button size="small">审核</Button>
+          </Dropdown>
+          <Dropdown menu={{ items: [{ key: 'print', label: '打印凭证' }] }}>
+            <Button size="small">打印</Button>
+          </Dropdown>
+          <Button size="small" icon={<ImportOutlined />}>导入</Button>
+          <Dropdown menu={{ items: [{ key: 'excel', label: '导出Excel' }, { key: 'pdf', label: '导出PDF' }] }}>
+            <Button size="small">导出</Button>
+          </Dropdown>
+          {selected.length > 0 && (
+            <Popconfirm title={`确认删除 ${selected.length} 张凭证？`} onConfirm={async () => {
+              for (const sid of selected) { try { await api.deleteVoucher(sid) } catch { /* skip */ } }
+              setSelected([])
+              fetchData()
+            }}>
+              <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
+            </Popconfirm>
+          )}
+          <Dropdown menu={{ items: [
+            { key: 'batch-post', label: '批量记账' },
+            { key: 'batch-delete', label: '批量删除' },
+            { key: 'sort', label: '凭证整理' },
+          ] }}>
+            <Button size="small">更多</Button>
+          </Dropdown>
+        </Space>
       </div>
 
-      <Card size="small">
-        <Row gutter={[12, 12]}>
-          <Col flex="200px">
-            <Input placeholder="凭证号/摘要搜索" prefix={<SearchOutlined />}
-              onChange={e => setFilters(f => ({ ...f, keyword: e.target.value, page: 1 }))} allowClear />
-          </Col>
-          <Col flex="140px">
-            <Select placeholder="状态" style={{ width: '100%' }} allowClear
-              onChange={v => setFilters(f => ({ ...f, status: v ?? '', page: 1 }))}>
-              {Object.entries(STATUS_LABELS).map(([v, l]) => <Select.Option key={v} value={v}>{l}</Select.Option>)}
-            </Select>
-          </Col>
-          <Col>
-            <RangePicker size="middle" onChange={(_, s) => setFilters(f => ({ ...f, startDate: s[0], endDate: s[1], page: 1 } as typeof f))} />
-          </Col>
-          {selected.length > 0 && (
-            <Col>
-              <Button icon={<CheckOutlined />} onClick={handleBatchPost}>批量记账 ({selected.length})</Button>
-            </Col>
+      {/* Table */}
+      <div style={{ flex: 1, padding: '0 16px' }}>
+        <Table
+          rowKey="key"
+          columns={columns}
+          dataSource={flatRows}
+          loading={loading}
+          size="small"
+          scroll={{ x: 1100 }}
+          bordered
+          rowSelection={{
+            selectedRowKeys: selected,
+            onChange: keys => setSelected(keys as string[]),
+            getCheckboxProps: r => ({ disabled: r.lineIndex > 0 }),
+          }}
+          pagination={{
+            current: filters.page,
+            pageSize: filters.pageSize,
+            total,
+            showSizeChanger: true,
+            showTotal: t => `共 ${t} 条凭证`,
+            onChange: (p, ps) => setFilters(f => ({ ...f, page: p, pageSize: ps })),
+          }}
+          summary={() => (
+            <Table.Summary fixed>
+              <Table.Summary.Row style={{ background: '#f6ffed' }}>
+                <Table.Summary.Cell index={0} colSpan={6}>
+                  <Text strong>合计</Text>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={6} align="right">
+                  <Text strong>{fmtAmount(totalDebit)}</Text>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={7} align="right">
+                  <Text strong>{fmtAmount(totalCredit)}</Text>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={8} />
+              </Table.Summary.Row>
+            </Table.Summary>
           )}
-        </Row>
-      </Card>
-
-      <Table
-        className="voucher-table"
-        rowKey="id"
-        columns={columns}
-        dataSource={data}
-        loading={loading}
-        scroll={{ x: 800 }}
-        rowSelection={{ selectedRowKeys: selected, onChange: k => setSelected(k as string[]) }}
-        pagination={{ current: filters.page, pageSize: filters.pageSize, total, showSizeChanger: true, showTotal: t => `共 ${t} 条`,
-          onChange: (p, ps) => setFilters(f => ({ ...f, page: p, pageSize: ps })) }}
-      />
-    </Space>
+        />
+      </div>
+    </div>
   )
 }
