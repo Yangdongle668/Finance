@@ -190,7 +190,7 @@ cmd_update() {
   cmd_backup
 
   info "拉取最新代码..."
-  git pull origin main
+  git pull
 
   info "重新构建镜像..."
   dc build --parallel --no-cache
