@@ -149,15 +149,23 @@ cmd_backup() {
   local backup_dir="./backups"
   local timestamp
   timestamp=$(date +%Y%m%d_%H%M%S)
-  local backup_file="${backup_dir}/finance_${timestamp}.db"
+  local backup_file="${backup_dir}/finance_${timestamp}.tar.gz"
 
   mkdir -p "$backup_dir"
 
-  # 从 Docker Volume 复制数据库文件
+  # 检查数据卷中是否有数据库文件
+  local db_count
+  db_count=$(docker run --rm -v finance_data:/data alpine sh -c 'ls /data/*.db 2>/dev/null | wc -l')
+  if [ "${db_count:-0}" -eq 0 ]; then
+    warn "数据卷中暂无数据库文件，跳过备份"
+    return 0
+  fi
+
+  # 打包所有 .db 文件（master.db + company_*.db）
   docker run --rm \
     -v finance_data:/data \
     -v "$(pwd)/backups:/backups" \
-    alpine cp /data/finance.db "/backups/finance_${timestamp}.db"
+    alpine tar czf "/backups/finance_${timestamp}.tar.gz" -C /data $(ls /data/*.db 2>/dev/null | xargs -n1 basename | tr '\n' ' ')
 
   success "备份完成：${backup_file}"
   ls -lh "$backup_dir" | tail -5
@@ -178,7 +186,7 @@ cmd_restore() {
   docker run --rm \
     -v finance_data:/data \
     -v "$(cd "$(dirname "$file")" && pwd):/restore" \
-    alpine cp "/restore/$(basename "$file")" /data/finance.db
+    alpine tar xzf "/restore/$(basename "$file")" -C /data
   dc start server
   success "数据库恢复完成"
 }
