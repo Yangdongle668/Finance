@@ -165,7 +165,7 @@ cmd_backup() {
   docker run --rm \
     -v finance_data:/data \
     -v "$(pwd)/backups:/backups" \
-    alpine tar czf "/backups/finance_${timestamp}.tar.gz" -C /data $(ls /data/*.db 2>/dev/null | xargs -n1 basename | tr '\n' ' ')
+    alpine sh -c 'cd /data && tar czf "/backups/finance_'"${timestamp}"'.tar.gz" *.db'
 
   success "备份完成：${backup_file}"
   ls -lh "$backup_dir" | tail -5
