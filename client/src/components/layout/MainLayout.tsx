@@ -5,7 +5,7 @@ import {
   DashboardOutlined, FileTextOutlined, BookOutlined, BarChartOutlined,
   BankOutlined, AuditOutlined, SettingOutlined,
   UserOutlined, LogoutOutlined, LockOutlined, AppstoreOutlined,
-  ReconciliationOutlined, SwapOutlined, EditOutlined,
+  ReconciliationOutlined, SwapOutlined, EditOutlined, FormOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { usePeriodStore } from '@/stores/periodStore'
@@ -16,23 +16,36 @@ const { Text } = Typography
 
 const menuItems = [
   { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表板' },
+  // ① 录入凭证
   {
-    key: 'voucher', icon: <FileTextOutlined />, label: '凭证',
+    key: 'voucher-entry', icon: <FormOutlined />, label: '凭证录入',
     children: [
       { key: '/vouchers/new', label: '录凭证' },
-      { key: '/vouchers', label: '查凭证' },
-      { key: '/vouchers/summary', label: '凭证汇总表' },
       { key: '/voucher/attachment-manage', label: '原始凭证管理' },
     ]
   },
+  // ② 审核凭证
   {
-    key: 'ledger', icon: <BookOutlined />, label: '账簿',
+    key: 'voucher-review', icon: <AuditOutlined />, label: '凭证审核',
+    children: [
+      { key: '/vouchers', label: '凭证列表' },
+      { key: '/vouchers/summary', label: '凭证汇总表' },
+    ]
+  },
+  // ③④ 过账 / 明细账
+  {
+    key: 'ledger', icon: <BookOutlined />, label: '账簿查询',
     children: [
       { key: '/ledger/trial-balance', label: '科目余额表' },
       { key: '/ledger/detail', label: '明细账' },
       { key: '/ledger/general', label: '总账' },
     ]
   },
+  // ④ 固定资产（折旧计提）
+  { key: '/assets', icon: <AppstoreOutlined />, label: '固定资产' },
+  // ⑤ 期末结账
+  { key: '/closing', icon: <ReconciliationOutlined />, label: '期末结账' },
+  // ⑥ 财务报表
   {
     key: 'reports', icon: <BarChartOutlined />, label: '财务报表',
     children: [
@@ -40,16 +53,13 @@ const menuItems = [
       { key: '/reports/income-statement', label: '利润表' },
     ]
   },
-  { key: '/closing', icon: <ReconciliationOutlined />, label: '结账' },
-  { key: '/assets', icon: <AppstoreOutlined />, label: '固定资产' },
-  { key: '/invoices', icon: <AuditOutlined />, label: '发票管理' },
+  { key: '/invoices', icon: <FileTextOutlined />, label: '发票管理' },
   {
     key: 'settings', icon: <SettingOutlined />, label: '系统设置',
     children: [
-      { key: '/settings/company', label: '账套管理' },
       { key: '/settings/accounts', label: '科目设置' },
       { key: '/settings/periods', label: '期间管理' },
-      { key: '/settings/company', label: '账套信息' },
+      { key: '/settings/company', label: '账套管理' },
       { key: '/settings/users', label: '用户管理' },
     ]
   },
