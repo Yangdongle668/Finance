@@ -10,7 +10,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
-      DB_PATH: /app/data/finance.db
+      DB_PATH: /app/data/master.db
       JWT_SECRET: ${JWT_SECRET:-please_change_this_secret_in_production}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-10}
