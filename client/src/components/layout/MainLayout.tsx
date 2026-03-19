@@ -46,6 +46,7 @@ const menuItems = [
   {
     key: 'settings', icon: <SettingOutlined />, label: '系统设置',
     children: [
+      { key: '/settings/company', label: '账套管理' },
       { key: '/settings/accounts', label: '科目设置' },
       { key: '/settings/periods', label: '期间管理' },
       { key: '/settings/company', label: '账套信息' },
