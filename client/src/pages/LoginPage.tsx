@@ -19,16 +19,7 @@ export default function LoginPage() {
       const { token, user, companies } = res.data.data
       setAuth(token, user, companies)
       message.success(`欢迎回来，${user.name}`)
-      // If user has companies, go to company selection; otherwise go to dashboard
-      if (companies && companies.length > 1) {
-        navigate('/select-company')
-      } else if (companies && companies.length === 1) {
-        // Auto-select the only company
-        localStorage.setItem('companyId', companies[0].id)
-        navigate('/')
-      } else {
-        navigate('/select-company')
-      }
+      navigate('/select-company')
     } finally {
       setLoading(false)
     }

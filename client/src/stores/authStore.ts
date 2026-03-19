@@ -71,7 +71,8 @@ export const useAuthStore = create<AuthState>()(
       currentCompanyId: null,
       setAuth: (token, user, companies) => {
         localStorage.setItem('token', token)
-        set({ token, user, companies: companies || [] })
+        localStorage.removeItem('companyId')
+        set({ token, user, companies: companies || [], currentCompanyId: null })
       },
       setCompanies: (companies) => set({ companies }),
       setCurrentCompany: (companyId) => {
