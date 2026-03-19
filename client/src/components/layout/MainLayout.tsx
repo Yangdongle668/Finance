@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Layout, Menu, Dropdown, Avatar, Select, Space, Typography, Tag } from 'antd'
+import { Layout, Menu, Dropdown, Avatar, Select, Space, Typography, Tag, Tooltip } from 'antd'
 import {
   DashboardOutlined, FileTextOutlined, BookOutlined, BarChartOutlined,
   BankOutlined, AuditOutlined, SettingOutlined,
@@ -85,7 +85,6 @@ export default function MainLayout() {
   const userMenu = [
     { key: 'profile', icon: <EditOutlined />, label: '个人信息' },
     { key: 'pwd', icon: <LockOutlined />, label: '修改密码' },
-    ...(companies.length > 1 ? [{ key: 'switch', icon: <SwapOutlined />, label: '切换账套' }] : []),
     { type: 'divider' as const },
     { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', danger: true },
   ]
@@ -125,10 +124,17 @@ export default function MainLayout() {
         <Header style={{ background: '#fff', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f0f0f0', height: 56, position: 'sticky', top: 0, zIndex: 100 }}>
           <Space size={16}>
             {currentCompany && (
-              <Tag color="blue" style={{ fontSize: 13, padding: '2px 8px' }}>
-                <BankOutlined style={{ marginRight: 4 }} />
-                {currentCompany.name}
-              </Tag>
+              <Tooltip title="切换账套">
+                <Tag
+                  color="blue"
+                  style={{ fontSize: 13, padding: '2px 8px', cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => navigate('/select-company')}
+                >
+                  <BankOutlined style={{ marginRight: 4 }} />
+                  {currentCompany.name}
+                  <SwapOutlined style={{ marginLeft: 6, fontSize: 11, opacity: 0.75 }} />
+                </Tag>
+              </Tooltip>
             )}
             <Text type="secondary" style={{ fontSize: 13 }}>当前期间</Text>
             <Select
