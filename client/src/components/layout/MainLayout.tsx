@@ -59,17 +59,18 @@ export default function MainLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, companies, currentCompanyId, getCurrentCompany, logout } = useAuthStore()
-  const { periods, currentPeriod, setPeriods, setCurrentPeriod } = usePeriodStore()
+  const { periods, currentPeriod, setPeriods, setCurrentPeriod, resetPeriods } = usePeriodStore()
   const [collapsed, setCollapsed] = useState(false)
 
   const currentCompany = getCurrentCompany()
 
   useEffect(() => {
     if (!currentCompanyId) return
+    resetPeriods()
     api.listPeriods().then(r => {
       const ps = r.data.data
       setPeriods(ps)
-      if (!currentPeriod && ps.length > 0) {
+      if (ps.length > 0) {
         const open = ps.filter(p => p.status === 'open')
         setCurrentPeriod(open[0] ?? ps[0])
       }

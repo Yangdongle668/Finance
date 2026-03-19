@@ -165,6 +165,10 @@ export default function VoucherFormPage() {
   }, [])
 
   const buildPayload = (allowImbalanced = false) => {
+    if (!currentPeriod) {
+      message.error('当前账套暂无会计期间，请先在期间管理中创建期间')
+      return null
+    }
     const validLines = lines.filter(l => l.accountCode && (l.debitAmount || l.creditAmount))
     if (validLines.length < 2) {
       message.error('至少需要2行有效分录')
@@ -225,6 +229,10 @@ export default function VoucherFormPage() {
 
   /** 暂存草稿：允许借贷不平衡，校验宽松 */
   const handleDraftSave = async () => {
+    if (!currentPeriod) {
+      message.error('当前账套暂无会计期间，请先在期间管理中创建期间')
+      return
+    }
     const validLines = lines.filter(l => l.accountCode && (l.debitAmount || l.creditAmount))
     if (validLines.length < 1) {
       message.error('至少需要1行有效分录才能暂存')
@@ -232,7 +240,7 @@ export default function VoucherFormPage() {
     }
     const payload = {
       voucherDate: voucherDate.format('YYYY-MM-DD'),
-      periodId: currentPeriod!.id,
+      periodId: currentPeriod.id,
       summary: validLines[0]?.summary || '草稿凭证',
       voucherWord,
       attachmentCount,
