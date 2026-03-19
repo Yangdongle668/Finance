@@ -127,11 +127,19 @@ export default function VoucherListPage() {
 
   const handleBatchApprove = async () => {
     const voucherIds = [...new Set(selected.map(k => k.split('_')[0]))]
-    let success = 0
+    let success = 0, fail = 0
     for (const vid of voucherIds) {
-      try { await api.approveVoucher(vid); success++ } catch { /* skip */ }
+      try {
+        const row = flatRows.find(r => r.voucherId === vid && r.lineIndex === 0)
+        if (row?.status === 'draft') {
+          await api.submitVoucher(vid)
+        }
+        await api.approveVoucher(vid)
+        success++
+      } catch { fail++ }
     }
-    message.success(`成功审核 ${success} 张凭证`)
+    if (fail > 0) message.warning(`审核完成：成功 ${success} 张，失败 ${fail} 张`)
+    else message.success(`成功审核 ${success} 张凭证`)
     setSelected([])
     fetchData()
   }
