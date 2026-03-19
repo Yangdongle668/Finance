@@ -141,41 +141,46 @@ export class ReportService {
       .filter(r => codes.some(c => r.accountCode.startsWith(c)))
       .reduce((s, r) => s + r.closingDebit - r.closingCredit, 0)
 
+    // 负债科目余额需要取反（负债的正常方向是贷方，get() 返回 debit-credit）
+    const getCredit = (codes: string[]) => -get(codes)
+
     return {
       assets: {
         current: {
-          cash: get(['1001', '1002']),
-          bankDeposit: get(['1002']),
-          receivable: get(['1122', '1123']),
-          prepaid: get(['1123']),
-          inventory: get(['1401', '1402', '1403', '1405', '1406', '1407', '1408']),
-          other: get(['1121', '1231']),
+          cash: get(['1001']),                    // 库存现金
+          bankDeposit: get(['1002']),              // 银行存款
+          receivableNotes: get(['1121']),          // 应收票据
+          receivable: get(['1122']),               // 应收账款
+          prepaid: get(['1123']),                  // 预付账款
+          otherReceivable: get(['1231']),          // 其他应收款
+          inventory: get(['1401', '1402', '1403', '1405']), // 存货
         },
         nonCurrent: {
-          fixedAsset: get(['1601']),
-          accumulatedDepreciation: -get(['1602']),
-          intangible: get(['1701']),
-          other: get(['1901']),
+          fixedAsset: get(['1601']),               // 固定资产原值
+          accumulatedDepreciation: -get(['1602']), // 累计折旧（负数）
+          intangible: get(['1701']),               // 无形资产
+          other: get(['1901']),                    // 待处理财产损溢
         },
       },
       liabilities: {
         current: {
-          shortLoan: get(['2001']),
-          payable: get(['2202', '2203', '2211', '2221']),
-          advanceReceipt: get(['2203']),
-          taxPayable: get(['2221']),
-          other: get(['2241']),
+          shortLoan: getCredit(['2001']),          // 短期借款
+          payable: getCredit(['2202']),            // 应付账款
+          advanceReceipt: getCredit(['2203']),     // 预收账款
+          employeePayable: getCredit(['2211']),    // 应付职工薪酬
+          taxPayable: getCredit(['2221']),         // 应交税费
+          other: getCredit(['2241']),              // 其他应付款
         },
         nonCurrent: {
-          longLoan: get(['2501']),
-          other: get(['2701']),
+          longLoan: getCredit(['2501']),           // 长期借款
+          other: getCredit(['2701']),              // 长期应付款
         },
       },
       equity: {
-        paidIn: get(['4001']),
-        surplus: get(['4101', '4102']),
-        retained: get(['4103']),
-        currentProfit: get(['4000']),
+        paidIn: getCredit(['4001']),               // 实收资本
+        surplus: getCredit(['4101']),              // 盈余公积
+        currentProfit: getCredit(['4102']),        // 本年利润
+        retained: getCredit(['4103']),             // 利润分配-未分配利润
       },
     }
   }
@@ -187,17 +192,18 @@ export class ReportService {
       .filter(r => codes.some(c => r.accountCode.startsWith(c)))
       .reduce((s, r) => s + r.debitAmount - r.creditAmount, 0)
 
-    const revenue = -get(['6001', '6051'])                      // 营业收入（贷方）
-    const costOfGoods = get(['6401'])                           // 营业成本
+    const revenue = -get(['6001', '6051'])                      // 营业收入（贷方，取反为正数）
+    const costOfGoods = get(['6401', '6402'])                   // 营业成本（主营+其他）
     const grossProfit = revenue - costOfGoods
 
+    const taxSurcharge = get(['5402'])                          // 税金及附加
     const sellingExp = get(['6601'])                            // 销售费用
     const adminExp = get(['6602'])                              // 管理费用
     const financeExp = get(['6603'])                            // 财务费用
     const rdExp = get(['6604'])                                 // 研发费用
-    const operatingProfit = grossProfit - sellingExp - adminExp - financeExp - rdExp
+    const operatingProfit = grossProfit - taxSurcharge - sellingExp - adminExp - financeExp - rdExp
 
-    const nonOpIncome = -get(['6301'])                          // 营业外收入
+    const nonOpIncome = -get(['6301'])                          // 营业外收入（贷方，取反为正数）
     const nonOpExpense = get(['6711'])                          // 营业外支出
     const profitBeforeTax = operatingProfit + nonOpIncome - nonOpExpense
 
@@ -209,6 +215,7 @@ export class ReportService {
       costOfGoods,
       grossProfit,
       grossMargin: revenue !== 0 ? grossProfit / revenue : 0,
+      taxSurcharge,
       sellingExp,
       adminExp,
       financeExp,
@@ -324,10 +331,12 @@ export class ReportService {
       WHERE vl.account_code LIKE '1002%' AND v.period_id=? AND v.status='posted'
     `).get(periodId) as { bal: number }
 
-    const totalAssets = Object.values(bs.assets.current).reduce((a, b) => a + b, 0) +
-                        Object.values(bs.assets.nonCurrent).reduce((a, b) => a + b, 0)
-    const totalLiabilities = Object.values(bs.liabilities.current).reduce((a, b) => a + b, 0) +
-                              Object.values(bs.liabilities.nonCurrent).reduce((a, b) => a + b, 0)
+    const totalCurrentAssets = Object.values(bs.assets.current).reduce((a, b) => a + b, 0)
+    const totalNonCurrentAssets = Object.values(bs.assets.nonCurrent).reduce((a, b) => a + b, 0)
+    const totalAssets = totalCurrentAssets + totalNonCurrentAssets
+    const totalCurrentLiab = Object.values(bs.liabilities.current).reduce((a, b) => a + b, 0)
+    const totalNonCurrentLiab = Object.values(bs.liabilities.nonCurrent).reduce((a, b) => a + b, 0)
+    const totalLiabilities = totalCurrentLiab + totalNonCurrentLiab
     const totalEquity = Object.values(bs.equity).reduce((a, b) => a + b, 0)
 
     return {
@@ -349,8 +358,8 @@ export class ReportService {
         totalLiabilities,
         totalEquity,
         debtRatio: totalAssets !== 0 ? totalLiabilities / totalAssets : 0,
-        currentRatio: bs.liabilities.current.payable !== 0
-          ? (bs.assets.current.cash + bs.assets.current.receivable + bs.assets.current.inventory) / bs.liabilities.current.payable
+        currentRatio: totalCurrentLiab !== 0
+          ? totalCurrentAssets / totalCurrentLiab
           : 0,
       },
     }
