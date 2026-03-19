@@ -59,7 +59,7 @@ function TemplateCard({
       </Space>
 
       {item.isEnabled ? (
-        hasAmount || true ? (
+        hasAmount ? (
           <div style={{ fontSize: 13 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
               <Text type="secondary">已结转:</Text>

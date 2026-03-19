@@ -127,11 +127,19 @@ export default function VoucherListPage() {
 
   const handleBatchApprove = async () => {
     const voucherIds = [...new Set(selected.map(k => k.split('_')[0]))]
-    let success = 0
+    let success = 0, fail = 0
     for (const vid of voucherIds) {
-      try { await api.approveVoucher(vid); success++ } catch { /* skip */ }
+      try {
+        const row = flatRows.find(r => r.voucherId === vid && r.lineIndex === 0)
+        if (row?.status === 'draft') {
+          await api.submitVoucher(vid)
+        }
+        await api.approveVoucher(vid)
+        success++
+      } catch { fail++ }
     }
-    message.success(`成功审核 ${success} 张凭证`)
+    if (fail > 0) message.warning(`审核完成：成功 ${success} 张，失败 ${fail} 张`)
+    else message.success(`成功审核 ${success} 张凭证`)
     setSelected([])
     fetchData()
   }
@@ -149,10 +157,23 @@ export default function VoucherListPage() {
 
   const handleBatchPost = async () => {
     const voucherIds = [...new Set(selected.map(k => k.split('_')[0]))]
-    try {
-      const res = await api.batchPostVouchers(voucherIds)
-      message.success(`成功记账 ${res.data.data.success} 张凭证`)
-    } catch { /* error handled by interceptor */ }
+    let success = 0, fail = 0
+    // 一键记账：自动将草稿→提交→审核→记账
+    for (const vid of voucherIds) {
+      try {
+        const row = flatRows.find(r => r.voucherId === vid && r.lineIndex === 0)
+        if (row?.status === 'draft') {
+          await api.submitVoucher(vid)
+          await api.approveVoucher(vid)
+        } else if (row?.status === 'pending') {
+          await api.approveVoucher(vid)
+        }
+        await api.postVoucher(vid)
+        success++
+      } catch { fail++ }
+    }
+    if (fail > 0) message.warning(`记账完成：成功 ${success} 张，失败 ${fail} 张`)
+    else message.success(`成功记账 ${success} 张凭证`)
     setSelected([])
     fetchData()
   }

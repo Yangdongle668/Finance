@@ -192,6 +192,25 @@ export class VoucherRepository {
   /** 更新科目余额（记账时调用） */
   recalcBalances(periodId: string): void {
     withTransaction(db => {
+      // 查询上期期末余额，用于本期期初余额结转
+      const period = db.prepare('SELECT year, month FROM periods WHERE id=?').get(periodId) as
+        { year: number; month: number } | undefined
+      const prevPeriodBalMap = new Map<string, { debit: number; credit: number }>()
+      if (period) {
+        const prevYear = period.month === 1 ? period.year - 1 : period.year
+        const prevMonth = period.month === 1 ? 12 : period.month - 1
+        const prevPeriod = db.prepare('SELECT id FROM periods WHERE year=? AND month=?')
+          .get(prevYear, prevMonth) as { id: string } | undefined
+        if (prevPeriod) {
+          const prevBals = db.prepare(
+            'SELECT account_code, closing_debit, closing_credit FROM account_balances WHERE period_id=?'
+          ).all(prevPeriod.id) as { account_code: string; closing_debit: number; closing_credit: number }[]
+          for (const pb of prevBals) {
+            prevPeriodBalMap.set(pb.account_code, { debit: pb.closing_debit, credit: pb.closing_credit })
+          }
+        }
+      }
+
       // 汇总该期间所有已记账凭证的行
       const sums = db.prepare(`
         SELECT vl.account_code, vl.direction, SUM(vl.amount) as total
@@ -209,13 +228,22 @@ export class VoucherRepository {
         map.set(s.account_code, entry)
       }
 
+      // 确保上期有余额但本期无发生额的科目也会被处理（余额结转）
+      for (const [code] of prevPeriodBalMap.entries()) {
+        if (!map.has(code)) {
+          map.set(code, { debit: 0, credit: 0 })
+        }
+      }
+
       for (const [code, { debit, credit }] of map.entries()) {
         const bal = db.prepare(
           'SELECT * FROM account_balances WHERE account_code=? AND period_id=?'
         ).get(code, periodId) as Record<string, number> | undefined
 
-        const openDebit = bal?.opening_debit ?? 0
-        const openCredit = bal?.opening_credit ?? 0
+        // 期初余额优先用已有记录，否则从上期结转
+        const prevBal = prevPeriodBalMap.get(code)
+        const openDebit = bal?.opening_debit ?? prevBal?.debit ?? 0
+        const openCredit = bal?.opening_credit ?? prevBal?.credit ?? 0
         const closingDebit = Math.max(0, openDebit + debit - credit)
         const closingCredit = Math.max(0, openCredit + credit - debit)
 
@@ -224,6 +252,7 @@ export class VoucherRepository {
             (id,account_code,period_id,opening_debit,opening_credit,debit_amount,credit_amount,closing_debit,closing_credit)
           VALUES (?,?,?,?,?,?,?,?,?)
           ON CONFLICT(account_code,period_id) DO UPDATE SET
+            opening_debit=excluded.opening_debit, opening_credit=excluded.opening_credit,
             debit_amount=excluded.debit_amount, credit_amount=excluded.credit_amount,
             closing_debit=excluded.closing_debit, closing_credit=excluded.closing_credit
         `).run(

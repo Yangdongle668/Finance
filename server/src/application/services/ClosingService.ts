@@ -171,9 +171,16 @@ export class ClosingService {
         case 'depreciation': return this._calcDepreciation(periodId)
         case 'pnl': return Math.abs(this._calcNetProfit(periodId))
         case 'cost_of_sales': return Math.abs(this._getAccountBalance('1405', periodId))
-        case 'vat_out': return Math.abs(this._getAccountBalance('222101', periodId))
+        case 'vat_out': {
+          // 仅当增值税为贷方余额（应缴税款）时才需要结转
+          const vatBal = this._getAccountBalance('222101', periodId)
+          return vatBal < 0 ? Math.abs(vatBal) : 0
+        }
         case 'surcharge_tax': {
-          const vatBase = Math.abs(this._getAccountBalance('222101', periodId))
+          // 仅当增值税为贷方余额时才需计提附加税
+          const vatBal2 = this._getAccountBalance('222101', periodId)
+          if (vatBal2 >= 0) return 0
+          const vatBase = Math.abs(vatBal2)
           return Math.round(vatBase * 0.12 * 10000) / 10000
         }
         case 'income_tax': {
@@ -314,7 +321,9 @@ export class ClosingService {
         }
         case 'surcharge_tax': {
           // 计提税金及附加（城建税7%+教育费附加3%+地方教育附加2%=12%）
-          const vatAmt = Math.abs(this._getAccountBalance('222101', periodId))
+          const vatRawBal = this._getAccountBalance('222101', periodId)
+          if (vatRawBal >= 0) return [] // 无贷方余额（不欠税），无需计提
+          const vatAmt = Math.abs(vatRawBal)
           const totalSurcharge = Math.round(vatAmt * 0.12 * 100) // fen
           if (totalSurcharge === 0) return []
           const urban = Math.round(totalSurcharge * 7 / 12)    // 城建税 7%
@@ -492,8 +501,68 @@ export class ClosingService {
     const period = db.prepare('SELECT * FROM periods WHERE id=?').get(periodId) as { status: string } | undefined
     if (!period) throw new AppError(404, '期间不存在')
     if (period.status === 'closed') throw new AppError(400, '期间已是结账状态')
+
+    // 检查是否还有未记账凭证（草稿/待审核/已审核 都不应存在）
+    const unposted = db.prepare(`
+      SELECT COUNT(*) as cnt FROM vouchers
+      WHERE period_id=? AND status IN ('draft','pending','approved')
+    `).get(periodId) as { cnt: number }
+    if (unposted.cnt > 0) {
+      throw new AppError(400, `当前期间还有 ${unposted.cnt} 张未记账凭证，请先全部记账或删除后再结账`)
+    }
+
+    // 结账前重算所有科目余额，保证数据一致性
+    this._recalcBalancesForPeriod(periodId)
+
     const now = dayjs().toISOString()
     db.prepare("UPDATE periods SET status='closed',closed_at=?,updated_at=? WHERE id=?").run(now, now, periodId)
+
+    // 将期末余额结转为下期的期初余额
+    this._carryForwardBalances(periodId)
+  }
+
+  /** 重算指定期间的科目余额 */
+  private _recalcBalancesForPeriod(periodId: string): void {
+    const db = getDb()
+    const { VoucherRepository } = require('../../infrastructure/repositories/VoucherRepository')
+    const voucherRepo = new VoucherRepository()
+    voucherRepo.recalcBalances(periodId)
+  }
+
+  /** 将当前期间的期末余额结转为下一期间的期初余额 */
+  private _carryForwardBalances(periodId: string): void {
+    const db = getDb()
+    const period = db.prepare('SELECT year, month FROM periods WHERE id=?').get(periodId) as
+      { year: number; month: number } | undefined
+    if (!period) return
+
+    const nextYear = period.month === 12 ? period.year + 1 : period.year
+    const nextMonth = period.month === 12 ? 1 : period.month + 1
+    const nextPeriod = db.prepare('SELECT id FROM periods WHERE year=? AND month=?')
+      .get(nextYear, nextMonth) as { id: string } | undefined
+    if (!nextPeriod) return
+
+    // 获取当前期间所有科目的期末余额
+    const balances = db.prepare(
+      'SELECT account_code, closing_debit, closing_credit FROM account_balances WHERE period_id=?'
+    ).all(periodId) as { account_code: string; closing_debit: number; closing_credit: number }[]
+
+    const upsert = db.prepare(`
+      INSERT INTO account_balances
+        (id, account_code, period_id, opening_debit, opening_credit, debit_amount, credit_amount, closing_debit, closing_credit)
+      VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?)
+      ON CONFLICT(account_code, period_id) DO UPDATE SET
+        opening_debit=excluded.opening_debit, opening_credit=excluded.opening_credit
+    `)
+
+    for (const bal of balances) {
+      upsert.run(
+        `bal_${bal.account_code}_${nextPeriod.id}`,
+        bal.account_code, nextPeriod.id,
+        bal.closing_debit, bal.closing_credit,
+        bal.closing_debit, bal.closing_credit
+      )
+    }
   }
 
   reopenPeriod(periodId: string, _userId: string): void {

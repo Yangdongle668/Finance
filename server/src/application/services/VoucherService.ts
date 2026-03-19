@@ -60,7 +60,7 @@ export class VoucherService {
       const account = this.accountRepo.findByCode(line.accountCode)
       if (!account) throw new AppError(400, `科目 ${line.accountCode} 不存在`)
       if (!account.isEnabled) throw new AppError(400, `科目 ${line.accountCode} 已禁用`)
-      // 允许使用非末级科目，但记录警告（实务中允许部分上级科目直接挂账）
+      if (!account.isLeaf) throw new AppError(400, `科目 ${line.accountCode} 不是末级科目，不能直接挂凭证`)
     }
 
     // 3. 验证借贷平衡
@@ -221,6 +221,12 @@ export class VoucherService {
   reverse(id: string, userId: string): Voucher {
     const original = this.assertExists(id)
     if (original.status !== 'posted') throw new AppError(400, '只能反向已记账的凭证')
+
+    // 检查原凭证所在期间是否已结账
+    const period = this.periodRepo.findById(original.periodId)
+    if (period?.status === 'closed') {
+      throw new AppError(400, '原凭证所在期间已结账，请先反结账后再进行红字冲销')
+    }
 
     const voucherId = uuid()
     const word = original.voucherWord ?? '记'

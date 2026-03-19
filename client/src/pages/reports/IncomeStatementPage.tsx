@@ -21,18 +21,21 @@ export default function IncomeStatementPage() {
 
   if (!data) return <Spin spinning={loading}><div style={{ height: 300 }} /></Spin>
 
+  const ext = data as never as Record<string, number>
   const items = [
     { label: '一、营业收入', amount: data.revenue, note: '', highlight: true },
     { label: '减：营业成本', amount: -data.costOfGoods, note: `占收入 ${data.revenue ? pct(data.costOfGoods / data.revenue) : '—'}` },
     { label: '二、毛利润', amount: data.grossProfit, bold: true, note: `毛利率 ${pct(data.grossMargin)}` },
+    { label: '减：税金及附加', amount: -(ext.taxSurcharge ?? 0) },
     { label: '减：销售费用', amount: -data.sellingExp, note: data.revenue ? pct(data.sellingExp / data.revenue) : '' },
     { label: '减：管理费用', amount: -data.adminExp, note: data.revenue ? pct(data.adminExp / data.revenue) : '' },
+    { label: '减：研发费用', amount: -(ext.rdExp ?? 0) },
     { label: '减：财务费用', amount: -data.financeExp },
     { label: '三、营业利润', amount: data.operatingProfit, bold: true, note: `营业利润率 ${pct(data.operatingMargin)}` },
-    { label: '加：营业外收入', amount: (data as never as Record<string, number>).nonOpIncome ?? 0 },
-    { label: '减：营业外支出', amount: -((data as never as Record<string, number>).nonOpExpense ?? 0) },
-    { label: '四、利润总额', amount: (data as never as Record<string, number>).profitBeforeTax ?? data.netProfit, bold: true },
-    { label: '减：所得税费用', amount: -((data as never as Record<string, number>).incomeTax ?? 0) },
+    { label: '加：营业外收入', amount: ext.nonOpIncome ?? 0 },
+    { label: '减：营业外支出', amount: -(ext.nonOpExpense ?? 0) },
+    { label: '四、利润总额', amount: ext.profitBeforeTax ?? data.netProfit, bold: true },
+    { label: '减：所得税费用', amount: -(ext.incomeTax ?? 0) },
     { label: '五、净利润', amount: data.netProfit, bold: true, highlight: true, note: `净利率 ${pct(data.netMargin)}` },
   ]
 
