@@ -53,6 +53,7 @@ export const api = {
   getCompany: (id: string) => client.get<ApiResponse<Company>>(`/companies/${id}`),
   createCompany: (data: Partial<Company>) => client.post<ApiResponse<{ id: string }>>('/companies', data),
   updateCompany: (id: string, data: Partial<Company>) => client.put<ApiResponse<Company>>(`/companies/${id}`, data),
+  deleteCompany: (id: string) => client.delete<ApiResponse<null>>(`/companies/${id}`),
   listCompanyUsers: (companyId: string) => client.get<ApiResponse<CompanyUser[]>>(`/companies/${companyId}/users`),
   addCompanyUser: (companyId: string, data: { userId: string; role?: string; permissions?: string[] }) =>
     client.post(`/companies/${companyId}/users`, data),
@@ -148,13 +149,6 @@ export const api = {
     client.get<ApiResponse<Asset[]>>('/assets', { params }),
   createAsset: (data: Partial<Asset>) => client.post('/assets', data),
 
-  // Companies (账套管理)
-  listCompanies: () => client.get<ApiResponse<Company[]>>('/companies'),
-  getCompany: (id: string) => client.get<ApiResponse<Company>>(`/companies/${id}`),
-  createCompany: (data: Partial<Company>) => client.post<ApiResponse<Company>>('/companies', data),
-  updateCompany: (id: string, data: Partial<Company>) => client.put<ApiResponse<null>>(`/companies/${id}`, data),
-  deleteCompany: (id: string) => client.delete<ApiResponse<null>>(`/companies/${id}`),
-
   // Invoices
   listInvoices: (params?: InvoiceFilter) =>
     client.get<PaginatedResponse<Invoice>>('/invoices', { params }),
@@ -249,13 +243,6 @@ export interface ClosingSummaryItem {
   templateId: string; name: string; type: 'system' | 'custom'; systemKey: string | null
   isEnabled: boolean; isSystem: boolean; sortOrder: number
   transferred: number; pending: number; voucherId: string | null; voucherStatus: string | null
-}
-
-export interface Company {
-  id: string; name: string; taxNo: string | null; legalPerson: string | null
-  industry: string | null; address: string | null; phone: string | null
-  fiscalYearStart: number; accountingStandard: 'small' | 'general'; currency: string
-  createdAt: string; updatedAt: string
 }
 
 export interface Asset { id: string; assetNo: string; name: string; category: string; originalValue: number; usefulLife: number; acquiredDate: string; status: string }

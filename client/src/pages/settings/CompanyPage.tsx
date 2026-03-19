@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
-  Table, Card, Typography, Space, Button, Tag, Popconfirm,
+  Table, Typography, Space, Button, Tag, Popconfirm,
   message, Modal, Form, Input, InputNumber, Select,
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
@@ -15,8 +15,8 @@ const STANDARD_LABELS: Record<string, string> = {
 }
 
 export default function CompanyPage() {
-  const user = useAuthStore(s => s.user)
-  const isAdmin = user?.role === 'admin'
+  const getCurrentRole = useAuthStore(s => s.getCurrentRole)
+  const isAdmin = getCurrentRole() === 'admin'
 
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(false)
