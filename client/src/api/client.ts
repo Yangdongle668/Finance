@@ -170,7 +170,7 @@ export interface CompanyBrief { id: string; name: string; role: string; permissi
 export interface Company { id: string; name: string; taxNo?: string; legalPerson?: string; industry?: string; address?: string; phone?: string; fiscalYearStart: number; accountingStandard: string; currency: string; status: string; role?: string; createdAt: string; updatedAt: string }
 export interface CompanyUser { id: string; username: string; name: string; email?: string; phone?: string; isEnabled: boolean; role: string; permissions: string | null }
 export interface Period { id: string; year: number; month: number; name: string; startDate: string; endDate: string; status: 'open' | 'closing' | 'closed' }
-export interface Account { code: string; name: string; level: number; nature: string; direction: string; parentCode?: string; isLeaf: boolean; isEnabled: boolean }
+export interface Account { code: string; name: string; level: number; nature: string; direction: string; parentCode?: string | null; isLeaf: boolean; isEnabled: boolean; remark?: string | null }
 export interface Dimension { id: string; type: string; code: string; name: string; isEnabled: boolean }
 
 export type VoucherWord = '记' | '收' | '付' | '转'

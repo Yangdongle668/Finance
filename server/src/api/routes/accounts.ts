@@ -28,8 +28,14 @@ router.get('/:code', (req: Request, res: Response) => {
 
 // POST /api/accounts
 router.post('/', (req: Request, res: Response) => {
-  repo.create(req.body)
-  res.status(201).json({ code: 0, message: '科目创建成功' })
+  const body = req.body
+  // Validate code uniqueness
+  if (repo.findByCode(body.code)) {
+    res.status(400).json({ code: 400, message: `科目代码 ${body.code} 已存在` })
+    return
+  }
+  repo.create(body)
+  res.status(201).json({ code: 0, message: '科目创建成功', data: { code: body.code } })
 })
 
 // PATCH /api/accounts/:code
