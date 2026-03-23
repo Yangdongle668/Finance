@@ -1,8 +1,16 @@
 import { useState, useEffect } from 'react'
 import { Card, Table, Button, Modal, Form, Input, Select, Tag, Space, Typography, message, Popconfirm } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
+import { PlusOutlined, UserAddOutlined } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { api, type CompanyUser } from '@/api/client'
+import ModuleTabBar from '@/components/layout/ModuleTabBar'
+
+const SETTINGS_TABS = [
+  { key: 'accounts', label: '科目设置', path: '/settings/accounts' },
+  { key: 'periods', label: '期间管理', path: '/settings/periods' },
+  { key: 'company', label: '账套管理', path: '/settings/company' },
+  { key: 'users', label: '用户管理', path: '/settings/users' },
+]
 
 const { Title } = Typography
 
@@ -22,9 +30,17 @@ export default function UserManagePage() {
   const { currentCompanyId, getCurrentRole } = useAuthStore()
   const [users, setUsers] = useState<CompanyUser[]>([])
   const [loading, setLoading] = useState(false)
+
+  // Add existing user modal
   const [addOpen, setAddOpen] = useState(false)
   const [allUsers, setAllUsers] = useState<{ id: string; username: string; name: string }[]>([])
-  const [form] = Form.useForm()
+  const [addForm] = Form.useForm()
+
+  // Create new user modal
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createForm] = Form.useForm()
+  const [creating, setCreating] = useState(false)
+
   const isAdmin = getCurrentRole() === 'admin'
 
   const loadUsers = async () => {
@@ -41,12 +57,39 @@ export default function UserManagePage() {
   useEffect(() => { loadUsers() }, [currentCompanyId])
 
   const handleAdd = async () => {
-    const values = await form.validateFields()
+    const values = await addForm.validateFields()
     await api.addCompanyUser(currentCompanyId!, values)
     message.success('用户已添加')
     setAddOpen(false)
-    form.resetFields()
+    addForm.resetFields()
     loadUsers()
+  }
+
+  const handleCreate = async () => {
+    const values = await createForm.validateFields()
+    if (values.password !== values.confirmPassword) {
+      message.error('两次输入的密码不一致')
+      return
+    }
+    setCreating(true)
+    try {
+      const res = await api.createUser({
+        username: values.username,
+        password: values.password,
+        name: values.name,
+        email: values.email || undefined,
+      })
+      const newUserId = res.data.data.id
+      await api.addCompanyUser(currentCompanyId!, { userId: newUserId, role: values.role })
+      message.success('用户已创建并加入账套')
+      setCreateOpen(false)
+      createForm.resetFields()
+      loadUsers()
+    } catch {
+      // handled by interceptor
+    } finally {
+      setCreating(false)
+    }
   }
 
   const handleRoleChange = async (userId: string, role: string) => {
@@ -94,15 +137,23 @@ export default function UserManagePage() {
   ]
 
   return (
-    <Card>
+    <>
+    <ModuleTabBar tabs={SETTINGS_TABS} />
+    <Card style={{ marginTop: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>用户管理</Title>
-        {isAdmin && <Button type="primary" icon={<PlusOutlined />} onClick={openAddModal}>添加用户</Button>}
+        {isAdmin && (
+          <Space>
+            <Button icon={<PlusOutlined />} onClick={openAddModal}>添加已有用户</Button>
+            <Button type="primary" icon={<UserAddOutlined />} onClick={() => setCreateOpen(true)}>新建用户</Button>
+          </Space>
+        )}
       </div>
       <Table dataSource={users} columns={columns} rowKey="id" loading={loading} pagination={false} />
 
-      <Modal title="添加用户到账套" open={addOpen} onCancel={() => setAddOpen(false)} onOk={handleAdd} okText="添加">
-        <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+      {/* Add existing user modal */}
+      <Modal title="添加已有用户到账套" open={addOpen} onCancel={() => setAddOpen(false)} onOk={handleAdd} okText="添加">
+        <Form form={addForm} layout="vertical" style={{ marginTop: 16 }}>
           <Form.Item name="userId" label="选择用户" rules={[{ required: true, message: '请选择用户' }]}>
             <Select
               showSearch
@@ -118,6 +169,38 @@ export default function UserManagePage() {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* Create new user modal */}
+      <Modal
+        title="新建用户"
+        open={createOpen}
+        onCancel={() => { setCreateOpen(false); createForm.resetFields() }}
+        onOk={handleCreate}
+        okText="创建并加入账套"
+        confirmLoading={creating}
+      >
+        <Form form={createForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item name="username" label="用户名" rules={[{ required: true, message: '请输入用户名' }, { min: 3, message: '至少3个字符' }]}>
+            <Input placeholder="用于登录的账号" autoComplete="off" />
+          </Form.Item>
+          <Form.Item name="name" label="姓名" rules={[{ required: true, message: '请输入姓名' }]}>
+            <Input placeholder="显示名称" />
+          </Form.Item>
+          <Form.Item name="email" label="邮箱">
+            <Input placeholder="可选" type="email" />
+          </Form.Item>
+          <Form.Item name="password" label="密码" rules={[{ required: true, message: '请输入密码' }, { min: 6, message: '至少6位' }]}>
+            <Input.Password placeholder="至少6位" autoComplete="new-password" />
+          </Form.Item>
+          <Form.Item name="confirmPassword" label="确认密码" rules={[{ required: true, message: '请再次输入密码' }]}>
+            <Input.Password placeholder="再次输入密码" autoComplete="new-password" />
+          </Form.Item>
+          <Form.Item name="role" label="角色" initialValue="accountant">
+            <Select options={ROLE_OPTIONS} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </Card>
+    </>
   )
 }

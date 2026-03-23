@@ -3,6 +3,12 @@ import { Card, Typography, Space, Button, Spin, Row, Col, Statistic, Progress } 
 import { PrinterOutlined } from '@ant-design/icons'
 import { api, type IncomeStatement } from '@/api/client'
 import { usePeriodStore } from '@/stores/periodStore'
+import ModuleTabBar from '@/components/layout/ModuleTabBar'
+
+const REPORT_TABS = [
+  { key: 'balance-sheet', label: '资产负债表', path: '/reports/balance-sheet' },
+  { key: 'income-statement', label: '利润表', path: '/reports/income-statement' },
+]
 
 const { Title, Text } = Typography
 const fmt = (n: number) => `¥${n.toFixed(2)}`
@@ -40,8 +46,10 @@ export default function IncomeStatementPage() {
   ]
 
   return (
+    <>
+    <ModuleTabBar tabs={REPORT_TABS} />
     <Spin spinning={loading}>
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space direction="vertical" size={16} style={{ width: '100%', paddingTop: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <Title level={4} style={{ margin: 0 }}>利润表（损益表）</Title>
@@ -95,5 +103,6 @@ export default function IncomeStatementPage() {
         </Row>
       </Space>
     </Spin>
+    </>
   )
 }

@@ -2,6 +2,14 @@ import { useState, useEffect } from 'react'
 import { Card, Form, Input, Select, Button, Typography, message } from 'antd'
 import { useAuthStore } from '@/stores/authStore'
 import { api, type Company } from '@/api/client'
+import ModuleTabBar from '@/components/layout/ModuleTabBar'
+
+const SETTINGS_TABS = [
+  { key: 'accounts', label: '科目设置', path: '/settings/accounts' },
+  { key: 'periods', label: '期间管理', path: '/settings/periods' },
+  { key: 'company', label: '账套管理', path: '/settings/company' },
+  { key: 'users', label: '用户管理', path: '/settings/users' },
+]
 
 const { Title } = Typography
 
@@ -51,7 +59,9 @@ export default function CompanySettingsPage() {
   }
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto' }}>
+    <>
+    <ModuleTabBar tabs={SETTINGS_TABS} />
+    <div style={{ maxWidth: 640, margin: '16px auto 0' }}>
       <Card loading={loading}>
         <Title level={4}>账套信息</Title>
         <Form form={form} layout="vertical">
@@ -100,5 +110,6 @@ export default function CompanySettingsPage() {
         </Form>
       </Card>
     </div>
+    </>
   )
 }

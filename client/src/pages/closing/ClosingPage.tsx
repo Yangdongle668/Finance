@@ -2,11 +2,11 @@ import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Tabs, Button, Checkbox, Card, Typography, Space, Tag, Tooltip,
-  Modal, Form, Input, Select, Table, Popconfirm, message, Spin, Switch, Empty, Row, Col,
+  Modal, Form, Input, Select, Table, Popconfirm, message, Spin, Switch, Empty, Row, Col, Alert,
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, SettingOutlined, ReloadOutlined,
-  CheckCircleOutlined, CloseCircleOutlined,
+  CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { api, type ClosingTemplate, type ClosingTemplateLine, type ClosingSummaryItem } from '@/api/client'
@@ -391,6 +391,9 @@ export default function ClosingPage() {
   const [closing, setClosing] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [unpostedVouchers, setUnpostedVouchers] = useState<{ id: string; voucherNo: string; status: string }[]>([])
+  const [loadingUnposted, setLoadingUnposted] = useState(false)
+  const [postingAll, setPostingAll] = useState(false)
   const [settingsTemplateId, setSettingsTemplateId] = useState<string | null>(null)
   const [newTemplateOpen, setNewTemplateOpen] = useState(false)
   const [newTemplateForm] = Form.useForm()
@@ -500,6 +503,45 @@ export default function ClosingPage() {
         }
       },
     })
+  }
+
+  const loadUnposted = useCallback(async () => {
+    if (!currentPeriod) return
+    setLoadingUnposted(true)
+    try {
+      const res = await api.listVouchers({ periodId: currentPeriod.id, status: 'draft,pending,approved', pageSize: 200, includeLines: false })
+      setUnpostedVouchers(res.data.data.map(v => ({ id: v.id, voucherNo: v.voucherNo, status: v.status })))
+    } catch {
+      setUnpostedVouchers([])
+    } finally {
+      setLoadingUnposted(false)
+    }
+  }, [currentPeriod?.id])
+
+  useEffect(() => {
+    if (activeTab === 'close') loadUnposted()
+  }, [activeTab, loadUnposted])
+
+  const handlePostAll = async () => {
+    if (!currentPeriod) return
+    setPostingAll(true)
+    let success = 0, fail = 0
+    for (const v of unpostedVouchers) {
+      try {
+        if (v.status === 'draft') {
+          await api.submitVoucher(v.id)
+          await api.approveVoucher(v.id)
+        } else if (v.status === 'pending') {
+          await api.approveVoucher(v.id)
+        }
+        await api.postVoucher(v.id)
+        success++
+      } catch { fail++ }
+    }
+    if (fail > 0) message.warning(`记账完成：成功 ${success} 张，失败 ${fail} 张`)
+    else message.success(`已成功记账 ${success} 张凭证，可以结账了`)
+    await loadUnposted()
+    setPostingAll(false)
   }
 
   const handleNewTemplate = async () => {
@@ -658,6 +700,27 @@ export default function ClosingPage() {
       {/* 结账 tab */}
       {activeTab === 'close' && (
         <div style={{ paddingTop: 24, maxWidth: 480 }}>
+          <Spin spinning={loadingUnposted}>
+            {unpostedVouchers.length > 0 && (
+              <Alert
+                type="warning"
+                icon={<ExclamationCircleOutlined />}
+                showIcon
+                style={{ marginBottom: 16 }}
+                message={`当前期间还有 ${unpostedVouchers.length} 张未记账凭证，请先全部记账后再结账`}
+                action={
+                  <Button
+                    size="small"
+                    type="primary"
+                    loading={postingAll}
+                    onClick={handlePostAll}
+                  >
+                    一键全部记账
+                  </Button>
+                }
+              />
+            )}
+          </Spin>
           <Card>
             <Space direction="vertical" style={{ width: '100%' }} size={16}>
               <div>
@@ -677,15 +740,22 @@ export default function ClosingPage() {
                 type="primary"
                 size="large"
                 loading={closing}
-                disabled={isClosed}
+                disabled={isClosed || unpostedVouchers.length > 0}
                 onClick={handleClose}
                 block
               >
                 执行结账
               </Button>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                结账后，当前期间将不允许录入或修改凭证。建议在结账前完成所有期末处理。
-              </Text>
+              {unpostedVouchers.length > 0 && !isClosed && (
+                <Text type="warning" style={{ fontSize: 12 }}>
+                  请先处理上方未记账凭证后再结账。
+                </Text>
+              )}
+              {unpostedVouchers.length === 0 && (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  结账后，当前期间将不允许录入或修改凭证。建议在结账前完成所有期末处理。
+                </Text>
+              )}
             </Space>
           </Card>
         </div>
