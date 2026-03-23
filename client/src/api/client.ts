@@ -68,6 +68,7 @@ export const api = {
   ensurePeriods: (year: number) => client.post(`/periods/ensure/${year}`),
   closePeriod: (id: string) => client.post(`/periods/${id}/close`),
   reopenPeriod: (id: string) => client.post(`/periods/${id}/reopen`),
+  recalcPeriodBalances: (id: string) => client.post(`/periods/${id}/recalc`),
 
   // Accounts
   listAccounts: (enabledOnly = false) =>

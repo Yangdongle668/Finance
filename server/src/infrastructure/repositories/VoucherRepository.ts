@@ -220,6 +220,9 @@ export class VoucherRepository {
         }
       }
 
+      // 清空本期所有余额记录，确保干净重算（防止父级余额重复累加）
+      db.prepare('DELETE FROM account_balances WHERE period_id=?').run(periodId)
+
       // 汇总该期间所有已记账凭证的行
       const sums = db.prepare(`
         SELECT vl.account_code, vl.direction, SUM(vl.amount) as total
@@ -244,29 +247,50 @@ export class VoucherRepository {
         }
       }
 
-      for (const [code, { debit, credit }] of map.entries()) {
-        const bal = db.prepare(
-          'SELECT * FROM account_balances WHERE account_code=? AND period_id=?'
-        ).get(code, periodId) as Record<string, number> | undefined
+      const insertBal = db.prepare(`
+        INSERT INTO account_balances
+          (id,account_code,period_id,opening_debit,opening_credit,debit_amount,credit_amount,closing_debit,closing_credit)
+        VALUES (?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(account_code,period_id) DO UPDATE SET
+          opening_debit  = opening_debit  + excluded.opening_debit,
+          opening_credit = opening_credit + excluded.opening_credit,
+          debit_amount   = debit_amount   + excluded.debit_amount,
+          credit_amount  = credit_amount  + excluded.credit_amount,
+          closing_debit  = closing_debit  + excluded.closing_debit,
+          closing_credit = closing_credit + excluded.closing_credit
+      `)
 
-        // 期初余额优先用已有记录，否则从上期结转
+      for (const [code, { debit, credit }] of map.entries()) {
         const prevBal = prevPeriodBalMap.get(code)
-        const openDebit = bal?.opening_debit ?? prevBal?.debit ?? 0
-        const openCredit = bal?.opening_credit ?? prevBal?.credit ?? 0
+        const openDebit = prevBal?.debit ?? 0
+        const openCredit = prevBal?.credit ?? 0
         const closingDebit = Math.max(0, openDebit + debit - credit)
         const closingCredit = Math.max(0, openCredit + credit - debit)
 
-        db.prepare(`
-          INSERT INTO account_balances
-            (id,account_code,period_id,opening_debit,opening_credit,debit_amount,credit_amount,closing_debit,closing_credit)
-          VALUES (?,?,?,?,?,?,?,?,?)
-          ON CONFLICT(account_code,period_id) DO UPDATE SET
-            opening_debit=excluded.opening_debit, opening_credit=excluded.opening_credit,
-            debit_amount=excluded.debit_amount, credit_amount=excluded.credit_amount,
-            closing_debit=excluded.closing_debit, closing_credit=excluded.closing_credit
-        `).run(
+        insertBal.run(
           `bal_${code}_${periodId}`, code, periodId,
           openDebit, openCredit, debit, credit, closingDebit, closingCredit
+        )
+      }
+
+      // ── 向上汇总：将子科目余额累加到父科目（确保总账/余额表正确）──
+      // 按层级从深到浅处理，使多层嵌套也能正确逐级汇总
+      const accountsForRollup = db.prepare(
+        'SELECT code, parent_code FROM accounts WHERE parent_code IS NOT NULL ORDER BY level DESC'
+      ).all() as { code: string; parent_code: string }[]
+
+      for (const acc of accountsForRollup) {
+        const child = db.prepare(
+          `SELECT opening_debit,opening_credit,debit_amount,credit_amount,closing_debit,closing_credit
+           FROM account_balances WHERE account_code=? AND period_id=?`
+        ).get(acc.code, periodId) as Record<string, number> | undefined
+        if (!child) continue
+
+        insertBal.run(
+          `bal_${acc.parent_code}_${periodId}`, acc.parent_code, periodId,
+          child.opening_debit, child.opening_credit,
+          child.debit_amount, child.credit_amount,
+          child.closing_debit, child.closing_credit
         )
       }
     })
