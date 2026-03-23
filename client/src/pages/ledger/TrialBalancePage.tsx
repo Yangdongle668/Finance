@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Table, Card, Typography, Space, Button, Tag, Alert, Statistic, Row, Col } from 'antd'
-import { DownloadOutlined, CheckCircleOutlined, WarningOutlined } from '@ant-design/icons'
+import { Table, Card, Typography, Space, Button, Tag, Alert, Statistic, Row, Col, message } from 'antd'
+import { DownloadOutlined, CheckCircleOutlined, WarningOutlined, SyncOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { api, type TrialBalanceRow } from '@/api/client'
 import { usePeriodStore } from '@/stores/periodStore'
@@ -26,14 +26,29 @@ export default function TrialBalancePage() {
   const currentPeriod = usePeriodStore(s => s.currentPeriod)
   const [data, setData] = useState<TrialBalanceRow[]>([])
   const [loading, setLoading] = useState(false)
+  const [recalcing, setRecalcing] = useState(false)
 
-  useEffect(() => {
+  const loadData = () => {
     if (!currentPeriod) return
     setLoading(true)
     api.trialBalance(currentPeriod.id).then(r => {
       setData(r.data.data)
     }).finally(() => setLoading(false))
-  }, [currentPeriod?.id])
+  }
+
+  useEffect(() => { loadData() }, [currentPeriod?.id])
+
+  const handleRecalc = async () => {
+    if (!currentPeriod) return
+    setRecalcing(true)
+    try {
+      await api.recalcPeriodBalances(currentPeriod.id)
+      message.success('余额重算完成')
+      loadData()
+    } finally {
+      setRecalcing(false)
+    }
+  }
 
   const nonZero = data.filter(r => r.closingDebit + r.closingCredit + r.debitAmount + r.creditAmount > 0)
   const totalDebit = nonZero.filter(r => r.level === 1).reduce((s, r) => s + r.closingDebit, 0)
@@ -79,7 +94,10 @@ export default function TrialBalancePage() {
           <Title level={4} style={{ margin: 0 }}>科目余额表</Title>
           <Text type="secondary">{currentPeriod?.name}</Text>
         </div>
-        <Button icon={<DownloadOutlined />}>导出 Excel</Button>
+        <Space>
+          <Button icon={<SyncOutlined />} loading={recalcing} onClick={handleRecalc}>重算余额</Button>
+          <Button icon={<DownloadOutlined />}>导出 Excel</Button>
+        </Space>
       </div>
 
       {/* 借贷平衡检查 */}

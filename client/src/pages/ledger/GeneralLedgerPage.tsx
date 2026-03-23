@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Table, Typography, Space, Tag, Card, Statistic, Row, Col } from 'antd'
+import { Table, Typography, Space, Tag, Card, Statistic, Row, Col, Button, message } from 'antd'
+import { SyncOutlined } from '@ant-design/icons'
 import { api, type GeneralLedgerRow } from '@/api/client'
 import { usePeriodStore } from '@/stores/periodStore'
 import ModuleTabBar from '@/components/layout/ModuleTabBar'
@@ -23,12 +24,27 @@ export default function GeneralLedgerPage() {
   const currentPeriod = usePeriodStore(s => s.currentPeriod)
   const [data, setData] = useState<GeneralLedgerRow[]>([])
   const [loading, setLoading] = useState(false)
+  const [recalcing, setRecalcing] = useState(false)
 
-  useEffect(() => {
+  const loadData = () => {
     if (!currentPeriod) return
     setLoading(true)
     api.generalLedger(currentPeriod.id).then(r => setData(r.data.data)).finally(() => setLoading(false))
-  }, [currentPeriod?.id])
+  }
+
+  useEffect(() => { loadData() }, [currentPeriod?.id])
+
+  const handleRecalc = async () => {
+    if (!currentPeriod) return
+    setRecalcing(true)
+    try {
+      await api.recalcPeriodBalances(currentPeriod.id)
+      message.success('余额重算完成')
+      loadData()
+    } finally {
+      setRecalcing(false)
+    }
+  }
 
   const totalAssets = data.filter(r => r.nature === 'asset').reduce((s, r) => s + r.closingBalance, 0)
   const totalLiabilities = data.filter(r => r.nature === 'liability').reduce((s, r) => s + Math.abs(r.closingBalance), 0)
@@ -68,9 +84,12 @@ export default function GeneralLedgerPage() {
     <>
     <ModuleTabBar tabs={LEDGER_TABS} />
     <Space direction="vertical" size={16} style={{ width: '100%', paddingTop: 16 }}>
-      <div>
-        <Title level={4} style={{ margin: 0 }}>总账</Title>
-        <Text type="secondary">{currentPeriod?.name} · 一级科目汇总</Text>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <Title level={4} style={{ margin: 0 }}>总账</Title>
+          <Text type="secondary">{currentPeriod?.name} · 一级科目汇总</Text>
+        </div>
+        <Button icon={<SyncOutlined />} loading={recalcing} onClick={handleRecalc}>重算余额</Button>
       </div>
 
       <Row gutter={16}>

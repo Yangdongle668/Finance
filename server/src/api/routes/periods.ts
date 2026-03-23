@@ -1,10 +1,12 @@
 import { Router, Request, Response } from 'express'
 import { PeriodRepository } from '../../infrastructure/repositories/PeriodRepository'
+import { VoucherRepository } from '../../infrastructure/repositories/VoucherRepository'
 import { authenticate } from '../middleware/auth'
 import { ok } from '../middleware/errorHandler'
 
 const router = Router()
 const repo = new PeriodRepository()
+const voucherRepo = new VoucherRepository()
 
 router.use(authenticate)
 
@@ -35,6 +37,14 @@ router.post('/:id/reopen', (req: Request, res: Response) => {
   if (req.user!.role !== 'admin') { res.status(403).json({ code: 403, message: '只有管理员可以反结账' }); return }
   repo.updateStatus(req.params.id, 'open')
   ok(res, null, '反结账成功')
+})
+
+// 重算指定期间的科目余额（修复父级科目余额）
+router.post('/:id/recalc', (req: Request, res: Response) => {
+  const period = repo.findById(req.params.id)
+  if (!period) { res.status(404).json({ code: 404, message: '期间不存在' }); return }
+  voucherRepo.recalcBalances(req.params.id)
+  ok(res, null, '余额重算完成')
 })
 
 export default router

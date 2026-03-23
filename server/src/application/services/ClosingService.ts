@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
 import dayjs from 'dayjs'
-import { getDb } from '../../infrastructure/database/db'
+import { getDb, withTransaction } from '../../infrastructure/database/db'
 import { AppError } from '../../api/middleware/errorHandler'
 import type { ClosingTemplate, ClosingTemplateLine, ClosingSummaryItem, CreateTemplateData, UpdateTemplateData } from '../../domain/closing/types'
 
@@ -258,43 +258,48 @@ export class ClosingService {
 
     const now = dayjs().toISOString()
 
-    // Check for existing closing voucher
+    // Check for existing closing voucher (outside transaction — read-only)
     const existing = db.prepare(
       'SELECT voucher_id FROM closing_vouchers WHERE template_id=? AND period_id=?'
     ).get(templateId, periodId) as { voucher_id: string } | undefined
 
-    let voucherId: string
-    if (existing) {
-      // Overwrite existing voucher lines
-      voucherId = existing.voucher_id
-      db.prepare('DELETE FROM voucher_lines WHERE voucher_id=?').run(voucherId)
-      db.prepare("UPDATE vouchers SET status='draft',updated_at=? WHERE id=?").run(now, voucherId)
-    } else {
-      // Create new voucher
-      voucherId = randomUUID()
-      const lastNo = db.prepare(
-        "SELECT COALESCE(MAX(CAST(voucher_no AS INTEGER)),0) as maxNo FROM vouchers WHERE period_id=? AND voucher_word=?"
-      ).get(periodId, tpl.voucherWord) as { maxNo: number }
-      const nextNo = String(lastNo.maxNo + 1)
+    // Wrap all mutations in a single transaction for atomicity
+    const voucherId = withTransaction(db => {
+      let vid: string
+      if (existing) {
+        // Overwrite existing voucher lines atomically
+        vid = existing.voucher_id
+        db.prepare('DELETE FROM voucher_lines WHERE voucher_id=?').run(vid)
+        db.prepare("UPDATE vouchers SET status='draft',updated_at=? WHERE id=?").run(now, vid)
+      } else {
+        // Create new voucher
+        vid = randomUUID()
+        const lastNo = db.prepare(
+          "SELECT COALESCE(MAX(CAST(voucher_no AS INTEGER)),0) as maxNo FROM vouchers WHERE period_id=? AND voucher_word=?"
+        ).get(periodId, tpl.voucherWord) as { maxNo: number }
+        const nextNo = String(lastNo.maxNo + 1)
 
-      db.prepare(`
-        INSERT INTO vouchers (id,voucher_no,voucher_word,voucher_date,period_id,summary,type,status,attachment_count,prepared_by,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,'carry_forward','draft',0,?,?,?)
-      `).run(voucherId, nextNo, tpl.voucherWord, period.end_date, periodId,
-             tpl.summary || tpl.name, userId, now, now)
+        db.prepare(`
+          INSERT INTO vouchers (id,voucher_no,voucher_word,voucher_date,period_id,summary,type,status,attachment_count,prepared_by,created_at,updated_at)
+          VALUES (?,?,?,?,?,?,'carry_forward','draft',0,?,?,?)
+        `).run(vid, nextNo, tpl.voucherWord, period.end_date, periodId,
+               tpl.summary || tpl.name, userId, now, now)
 
-      db.prepare(
-        'INSERT INTO closing_vouchers (id,template_id,period_id,voucher_id,created_at) VALUES (?,?,?,?,?)'
-      ).run(randomUUID(), templateId, periodId, voucherId, now)
-    }
+        db.prepare(
+          'INSERT INTO closing_vouchers (id,template_id,period_id,voucher_id,created_at) VALUES (?,?,?,?,?)'
+        ).run(randomUUID(), templateId, periodId, vid, now)
+      }
 
-    // Insert lines
-    const insertLine = db.prepare(`
-      INSERT INTO voucher_lines (id,voucher_id,line_no,account_code,account_name,direction,amount)
-      VALUES (?,?,?,?,?,?,?)
-    `)
-    lines.forEach((l, i) => {
-      insertLine.run(randomUUID(), voucherId, i + 1, l.accountCode, l.accountName, l.direction, l.amount)
+      // Insert lines within the same transaction
+      const insertLine = db.prepare(`
+        INSERT INTO voucher_lines (id,voucher_id,line_no,account_code,account_name,direction,amount)
+        VALUES (?,?,?,?,?,?,?)
+      `)
+      lines.forEach((l, i) => {
+        insertLine.run(randomUUID(), vid, i + 1, l.accountCode, l.accountName, l.direction, l.amount)
+      })
+
+      return vid
     })
 
     return { voucherId }
