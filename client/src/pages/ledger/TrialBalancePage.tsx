@@ -4,6 +4,13 @@ import { DownloadOutlined, CheckCircleOutlined, WarningOutlined } from '@ant-des
 import type { ColumnsType } from 'antd/es/table'
 import { api, type TrialBalanceRow } from '@/api/client'
 import { usePeriodStore } from '@/stores/periodStore'
+import ModuleTabBar from '@/components/layout/ModuleTabBar'
+
+const LEDGER_TABS = [
+  { key: 'trial-balance', label: '科目余额表', path: '/ledger/trial-balance' },
+  { key: 'detail', label: '明细账', path: '/ledger/detail' },
+  { key: 'general', label: '总账', path: '/ledger/general' },
+]
 
 const { Title, Text } = Typography
 
@@ -64,7 +71,9 @@ export default function TrialBalancePage() {
   ]
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <>
+    <ModuleTabBar tabs={LEDGER_TABS} />
+    <Space direction="vertical" size={16} style={{ width: '100%', paddingTop: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <Title level={4} style={{ margin: 0 }}>科目余额表</Title>
@@ -104,5 +113,6 @@ export default function TrialBalancePage() {
         rowClassName={r => r.level === 1 ? 'ant-table-row-level-0' : ''}
       />
     </Space>
+    </>
   )
 }

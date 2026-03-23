@@ -3,6 +3,14 @@ import { Table, Card, Typography, Space, Button, Tag, Popconfirm, message, Input
 import { api, type Period } from '@/api/client'
 import { usePeriodStore } from '@/stores/periodStore'
 import { useAuthStore } from '@/stores/authStore'
+import ModuleTabBar from '@/components/layout/ModuleTabBar'
+
+const SETTINGS_TABS = [
+  { key: 'accounts', label: '科目设置', path: '/settings/accounts' },
+  { key: 'periods', label: '期间管理', path: '/settings/periods' },
+  { key: 'company', label: '账套管理', path: '/settings/company' },
+  { key: 'users', label: '用户管理', path: '/settings/users' },
+]
 
 const { Title } = Typography
 
@@ -69,7 +77,9 @@ export default function PeriodPage() {
   ]
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <>
+    <ModuleTabBar tabs={SETTINGS_TABS} />
+    <Space direction="vertical" size={16} style={{ width: '100%', paddingTop: 16 }}>
       <Title level={4} style={{ margin: 0 }}>期间管理</Title>
 
       <Card size="small" title="初始化期间">
@@ -88,5 +98,6 @@ export default function PeriodPage() {
         pagination={false}
       />
     </Space>
+    </>
   )
 }

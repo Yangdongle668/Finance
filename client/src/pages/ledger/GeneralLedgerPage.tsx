@@ -2,6 +2,13 @@ import { useEffect, useState } from 'react'
 import { Table, Typography, Space, Tag, Card, Statistic, Row, Col } from 'antd'
 import { api, type GeneralLedgerRow } from '@/api/client'
 import { usePeriodStore } from '@/stores/periodStore'
+import ModuleTabBar from '@/components/layout/ModuleTabBar'
+
+const LEDGER_TABS = [
+  { key: 'trial-balance', label: '科目余额表', path: '/ledger/trial-balance' },
+  { key: 'detail', label: '明细账', path: '/ledger/detail' },
+  { key: 'general', label: '总账', path: '/ledger/general' },
+]
 
 const { Title, Text } = Typography
 
@@ -58,7 +65,9 @@ export default function GeneralLedgerPage() {
   ]
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <>
+    <ModuleTabBar tabs={LEDGER_TABS} />
+    <Space direction="vertical" size={16} style={{ width: '100%', paddingTop: 16 }}>
       <div>
         <Title level={4} style={{ margin: 0 }}>总账</Title>
         <Text type="secondary">{currentPeriod?.name} · 一级科目汇总</Text>
@@ -79,5 +88,6 @@ export default function GeneralLedgerPage() {
         pagination={false}
       />
     </Space>
+    </>
   )
 }

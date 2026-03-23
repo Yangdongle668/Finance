@@ -2,6 +2,14 @@ import { useEffect, useState } from 'react'
 import { Table, Card, Typography, Space, Switch, Tag, Input, Select, Button, Modal, Form, Popconfirm, message, Tooltip } from 'antd'
 import { SearchOutlined, PlusOutlined, EditOutlined } from '@ant-design/icons'
 import { api, type Account } from '@/api/client'
+import ModuleTabBar from '@/components/layout/ModuleTabBar'
+
+const SETTINGS_TABS = [
+  { key: 'accounts', label: '科目设置', path: '/settings/accounts' },
+  { key: 'periods', label: '期间管理', path: '/settings/periods' },
+  { key: 'company', label: '账套管理', path: '/settings/company' },
+  { key: 'users', label: '用户管理', path: '/settings/users' },
+]
 
 const { Title, Text } = Typography
 
@@ -152,7 +160,9 @@ export default function AccountsPage() {
   ]
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <>
+    <ModuleTabBar tabs={SETTINGS_TABS} />
+    <Space direction="vertical" size={16} style={{ width: '100%', paddingTop: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Title level={4} style={{ margin: 0 }}>科目设置</Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>新增科目</Button>
@@ -258,5 +268,6 @@ export default function AccountsPage() {
         </Form>
       </Modal>
     </Space>
+    </>
   )
 }
