@@ -5,7 +5,7 @@ import {
   PlusOutlined, FilterOutlined, ReloadOutlined,
   EditOutlined, DeleteOutlined, MoreOutlined,
   CheckOutlined, PrinterOutlined, ImportOutlined, ExportOutlined,
-  EyeOutlined, SearchOutlined,
+  EyeOutlined, SearchOutlined, AuditOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { api, type Voucher, type VoucherLine } from '@/api/client'
@@ -178,6 +178,30 @@ export default function VoucherListPage() {
     fetchData()
   }
 
+  const handlePostAll = async () => {
+    const unpostedIds = [...new Set(
+      flatRows.filter(r => r.status !== 'posted' && r.status !== 'reversed').map(r => r.voucherId)
+    )]
+    if (unpostedIds.length === 0) { message.info('当前视图内没有未记账凭证'); return }
+    let success = 0, fail = 0
+    for (const vid of unpostedIds) {
+      try {
+        const row = flatRows.find(r => r.voucherId === vid && r.lineIndex === 0)
+        if (row?.status === 'draft') {
+          await api.submitVoucher(vid)
+          await api.approveVoucher(vid)
+        } else if (row?.status === 'pending') {
+          await api.approveVoucher(vid)
+        }
+        await api.postVoucher(vid)
+        success++
+      } catch { fail++ }
+    }
+    if (fail > 0) message.warning(`记账完成：成功 ${success} 张，失败 ${fail} 张`)
+    else message.success(`成功记账 ${success} 张凭证，账簿数据已更新`)
+    fetchData()
+  }
+
   const handleBatchDelete = async () => {
     const voucherIds = [...new Set(selected.map(k => k.split('_')[0]))]
     let success = 0
@@ -321,6 +345,21 @@ export default function VoucherListPage() {
           ] }}>
             <Button size="small" icon={<CheckOutlined />}>审核</Button>
           </Dropdown>
+          {(() => {
+            const unpostedCount = new Set(
+              flatRows.filter(r => r.status !== 'posted' && r.status !== 'reversed').map(r => r.voucherId)
+            ).size
+            return (
+              <Button
+                size="small"
+                icon={<AuditOutlined />}
+                onClick={selected.length > 0 ? handleBatchPost : handlePostAll}
+                style={unpostedCount > 0 ? { color: '#fa8c16', borderColor: '#fa8c16' } : {}}
+              >
+                记账{unpostedCount > 0 ? `（${unpostedCount}）` : ''}
+              </Button>
+            )
+          })()}
           <Button size="small" icon={<PrinterOutlined />} onClick={handlePrint}>打印</Button>
           <Dropdown menu={{ items: [
             { key: 'excel', label: '导出CSV', onClick: handleExportExcel },

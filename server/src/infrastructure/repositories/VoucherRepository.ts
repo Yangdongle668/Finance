@@ -59,7 +59,16 @@ export class VoucherRepository {
     if (filter.periodId) { conditions.push('v.period_id=?'); params.push(filter.periodId) }
     if (filter.startDate) { conditions.push('v.voucher_date>=?'); params.push(filter.startDate) }
     if (filter.endDate) { conditions.push('v.voucher_date<=?'); params.push(filter.endDate) }
-    if (filter.status) { conditions.push('v.status=?'); params.push(filter.status) }
+    if (filter.status) {
+      const statuses = (filter.status as string).split(',').map(s => s.trim()).filter(Boolean)
+      if (statuses.length > 1) {
+        conditions.push(`v.status IN (${statuses.map(() => '?').join(',')})`)
+        params.push(...statuses)
+      } else {
+        conditions.push('v.status=?')
+        params.push(statuses[0])
+      }
+    }
     if (filter.type) { conditions.push('v.type=?'); params.push(filter.type) }
     if (filter.voucherWord) { conditions.push('v.voucher_word=?'); params.push(filter.voucherWord) }
     if (filter.keyword) {
