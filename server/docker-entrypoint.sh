@@ -8,5 +8,5 @@ node -e "
   console.log('✅ 数据库迁移完成');
 "
 
-echo "🚀 启动精斗云云会计系统后端..."
+echo "🚀 启动乐算云系统后端..."
 exec node dist/server.js

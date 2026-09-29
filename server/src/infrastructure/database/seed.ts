@@ -141,7 +141,9 @@ const insertDim = db.prepare(`
 `)
 for (const d of dims) insertDim.run(...d, now, now)
 
-console.log('✅ 乐算云系统种子数据初始化完成')
-console.log('   管理员账号: admin / Admin@123')
-console.log('   默认账套: 示例企业有限公司')
-process.exit(0)
+if (require.main === module) {
+  console.log('✅ 乐算云系统种子数据初始化完成')
+  console.log('   管理员账号: admin / Admin@123')
+  console.log('   默认账套: 示例企业有限公司')
+  process.exit(0)
+}

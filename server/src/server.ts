@@ -7,6 +7,7 @@ import morgan from 'morgan'
 import rateLimit from 'express-rate-limit'
 
 import { runMigrations } from './infrastructure/database/migrate'
+import { getMasterDb } from './infrastructure/database/db'
 import { logger } from './infrastructure/logger'
 import { errorHandler, notFound } from './api/middleware/errorHandler'
 
@@ -72,6 +73,16 @@ app.use(errorHandler)
 async function bootstrap() {
   try {
     runMigrations()
+
+    // Auto-seed initial data if database has no users yet
+    const masterDb = getMasterDb()
+    const { c: userCount } = masterDb.prepare('SELECT COUNT(*) as c FROM users').get() as { c: number }
+    if (userCount === 0) {
+      logger.info('Empty database detected — running initial seed...')
+      require('./infrastructure/database/seed')
+      logger.info('Initial seed complete — default credentials: admin / Admin@123')
+    }
+
     app.listen(PORT, () => {
       logger.info(`🚀 乐算云系统后端启动: http://localhost:${PORT}`)
     })

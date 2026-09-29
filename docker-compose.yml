@@ -65,16 +65,22 @@ services:
       - finance_data:/app/data
     networks:
       - finance_net
-    # 仅当 master.db 不存在时才运行种子
+    # 仅当数据库中没有用户时才运行种子（服务器已在启动时创建master.db）
     command: >
       sh -c "
-        if [ ! -f /app/data/master.db ]; then
+        SEEDED=$(node -e \"
+          try {
+            const {getMasterDb}=require('./dist/infrastructure/database/db');
+            const c=getMasterDb().prepare('SELECT COUNT(*) as c FROM users').get().c;
+            process.stdout.write(String(c));
+          } catch(e) { process.stdout.write('0'); }
+        \" 2>/dev/null || echo 0);
+        if [ \"\$SEEDED\" = '0' ]; then
           echo '🌱 首次部署，初始化数据库...' &&
-          node -e \"const {runMigrations}=require('./dist/infrastructure/database/migrate');runMigrations()\" &&
           node dist/infrastructure/database/seed.js &&
-          echo '✅ 数据库初始化完成，默认账号：admin / Admin@123';
+          echo '✅ 初始化完成，默认账号：admin / Admin@123';
         else
-          echo '⏭  数据库已存在，跳过初始化';
+          echo \"⏭  数据库已初始化（\$SEEDED 个用户），跳过\";
         fi
       "
     depends_on:
